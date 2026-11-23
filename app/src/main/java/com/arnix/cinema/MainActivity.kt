@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
@@ -132,12 +133,28 @@ fun ArnixCinemaApp() {
                                         heading.equals("Переработано", true) ||
                                         heading.equals("Удалено", true) ||
                                         heading.equals("Исправлено", true)
-                                    Text(
-                                        text = line.trim().removePrefix("#").trim(),
-                                        color = if (isHeading) TextPrimary else TextSecondary,
-                                        fontWeight = if (isHeading) FontWeight.SemiBold else FontWeight.Normal,
-                                        fontSize = if (isHeading) 14.sp else 13.sp
-                                    )
+                                    if (isHeading) {
+                                        Surface(
+                                            color = Accent.copy(alpha = 0.10f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(
+                                                text = heading,
+                                                color = Accent,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            text = line.trim().removePrefix("-").trim(),
+                                            color = TextSecondary,
+                                            fontWeight = FontWeight.Normal,
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -429,7 +446,34 @@ private fun DetailScreen(item: MediaItem, onBack: () -> Unit, onFavorite: () -> 
                     contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
                 )
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Bg))))
-                Text("‹ Назад", color = Color.White, modifier = Modifier.align(Alignment.TopStart).padding(20.dp).clickable { onBack() })
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 16.dp, top = 18.dp)
+                        .clickable { onBack() },
+                    color = Color(0xF2FFFFFF),
+                    shape = RoundedCornerShape(24.dp),
+                    shadowElevation = 6.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                        Text(
+                            "Назад",
+                            color = TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
         item {
