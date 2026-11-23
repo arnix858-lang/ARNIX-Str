@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,3 +42,14 @@ jobs:
         with:
           name: ARNIX-Cinema-release
           path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish APK as GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: ARNIX Cinema 1.0.${{ github.run_number }}
+          body: |
+            Новая версия ARNIX Cinema.
+            Установите APK вручную или обновитесь через встроенное окно приложения.
+          files: app/build/outputs/apk/release/app-release.apk
+          fail_on_unmatched_files: true
