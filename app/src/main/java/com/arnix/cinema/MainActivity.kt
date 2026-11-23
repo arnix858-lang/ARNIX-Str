@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -331,8 +333,9 @@ fun ArnixCinemaApp() {
                         })
                         tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
                         tab == "Каталог" -> CatalogScreen(
-                            items = movies.map { it.copy(media_type = "movie") } + series.map { it.copy(media_type = "tv") },
-                            loading = loading,
+                            items = catalogItems,
+                            loading = catalogLoading,
+                            genres = catalogGenres,
                             filter = catalogFilter,
                             genreId = catalogGenre,
                             year = catalogYear,
