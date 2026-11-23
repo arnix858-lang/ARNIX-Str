@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,7 +34,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.arnix.cinema.data.MediaItem
 import com.arnix.cinema.data.TmdbApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Bg = Color(0xFFF5F7FB)
 private val SurfaceDark = Color(0xFFFFFFFF)
@@ -54,6 +57,10 @@ class MainActivity : ComponentActivity() {
 fun ArnixCinemaApp() {
     val api = remember { TmdbApi.create() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var updateInfo by remember { mutableStateOf<AppUpdate?>(null) }
+    var updateBusy by remember { mutableStateOf(false) }
+    var updateError by remember { mutableStateOf<String?>(null) }
     var tab by remember { mutableStateOf("Главная") }
     var trending by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var movies by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
@@ -83,7 +90,12 @@ fun ArnixCinemaApp() {
         }
     }
 
-    LaunchedEffect(Unit) { loadHome() }
+    LaunchedEffect(Unit) {
+        loadHome()
+        updateInfo = withContext(Dispatchers.IO) {
+            runCatching { AppUpdater.checkForUpdate(context) }.getOrNull()
+        }
+    }
 
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val destinations = listOf(
@@ -100,6 +112,39 @@ fun ArnixCinemaApp() {
         surfaceVariant = Color(0xFFEEF3F8), onSurfaceVariant = TextSecondary,
         outline = BorderSoft
     )) {
+        updateInfo?.let { update ->
+            AlertDialog(
+                onDismissRequest = { if (!updateBusy) updateInfo = null },
+                title = { Text("Доступно обновление ARNIX Cinema") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Новая версия ${update.versionName}")
+                        Text("Нажмите «Обновить» — приложение скачает APK и откроет системную установку.")
+                        if (update.releaseNotes.isNotBlank()) Text(update.releaseNotes, color = TextSecondary)
+                        updateError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        if (updateBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !updateBusy, onClick = {
+                        scope.launch {
+                            updateBusy = true
+                            updateError = null
+                            try {
+                                if (AppUpdater.downloadAndInstall(context, update)) updateInfo = null
+                            } catch (e: Exception) {
+                                updateError = e.message ?: "Ошибка загрузки обновления."
+                            } finally {
+                                updateBusy = false
+                            }
+                        }
+                    }) { Text(if (updateBusy) "Загрузка…" else "Обновить") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !updateBusy, onClick = { updateInfo = null }) { Text("Позже") }
+                }
+            )
+        }
         if (compact) {
             Scaffold(
                 containerColor = Bg,
@@ -301,7 +346,7 @@ private fun PosterCard(
                 color = TextPrimary,
                 fontSize = 13.sp,
                 lineHeight = 17.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Normal,
                 maxLines = 2,
                 minLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
