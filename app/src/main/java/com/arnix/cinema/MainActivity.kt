@@ -16,7 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.arnix.cinema.data.MediaItem
 import com.arnix.cinema.data.TmdbApi
+import com.arnix.cinema.data.TmdbGenre
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,6 +73,9 @@ fun ArnixCinemaApp() {
     var catalogFilter by remember { mutableStateOf("Все") }
     var catalogGenre by remember { mutableStateOf(0) }
     var catalogYear by remember { mutableStateOf("Любой") }
+    var catalogGenres by remember { mutableStateOf<List<TmdbGenre>>(emptyList()) }
+    var catalogItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var catalogLoading by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -97,6 +101,13 @@ fun ArnixCinemaApp() {
 
     LaunchedEffect(Unit) {
         loadHome()
+        if (TmdbKey.value.isNotBlank()) {
+            runCatching {
+                val movieGenres = api.movieGenres(TmdbKey.value).genres
+                val tvGenres = api.tvGenres(TmdbKey.value).genres
+                catalogGenres = (movieGenres + tvGenres).distinctBy { it.id }.sortedBy { it.name }
+            }
+        }
         updateInfo = withContext(Dispatchers.IO) {
             runCatching { AppUpdater.checkForUpdate(context) }.getOrNull()
         }
@@ -127,10 +138,34 @@ fun ArnixCinemaApp() {
         }
     }
 
+    LaunchedEffect(tab, catalogFilter, catalogGenre, catalogYear) {
+        if (tab != "Каталог") return@LaunchedEffect
+        if (TmdbKey.value.isBlank()) return@LaunchedEffect
+        catalogLoading = true
+        try {
+            val selectedYear = catalogYear.toIntOrNull()
+            val selectedGenre = catalogGenre.takeIf { it != 0 }
+            val movieResults = if (catalogFilter != "Сериалы") {
+                api.discoverMovies(TmdbKey.value, genreId = selectedGenre, year = selectedYear)
+                    .results.map { it.copy(media_type = "movie") }
+            } else emptyList()
+            val tvResults = if (catalogFilter != "Фильмы") {
+                api.discoverTv(TmdbKey.value, genreId = selectedGenre, year = selectedYear)
+                    .results.map { it.copy(media_type = "tv") }
+            } else emptyList()
+            catalogItems = movieResults + tvResults
+        } catch (_: Exception) {
+            catalogItems = emptyList()
+            error = "Не удалось загрузить каталог по выбранным фильтрам."
+        } finally {
+            catalogLoading = false
+        }
+    }
+
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val destinations = listOf(
         "Главная" to Icons.Default.Home,
-        "Каталог" to Icons.Default.Movie,
+        "Каталог" to Icons.Default.VideoLibrary,
         "Поиск" to Icons.Default.Search,
         "Избранное" to Icons.Default.Favorite
     )
@@ -151,8 +186,12 @@ fun ArnixCinemaApp() {
                         Text("Нажмите «Обновить» — приложение скачает APK и откроет системную установку.")
                         if (update.releaseNotes.isNotBlank()) {
                             Column(
-                                modifier = Modifier.heightIn(max = 260.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                                modifier = Modifier
+                                    .heightIn(max = 320.dp)
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 update.releaseNotes.lines().filter { it.isNotBlank() }.forEach { line ->
                                     val heading = line.trim().removePrefix("#").trim()
@@ -171,7 +210,7 @@ fun ArnixCinemaApp() {
                                                 color = Accent,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 13.sp,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
                                             )
                                         }
                                     } else {
@@ -180,7 +219,8 @@ fun ArnixCinemaApp() {
                                             color = TextSecondary,
                                             fontWeight = FontWeight.Normal,
                                             fontSize = 13.sp,
-                                            lineHeight = 18.sp
+                                            lineHeight = 21.sp,
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
                                         )
                                     }
                                 }
@@ -250,8 +290,9 @@ fun ArnixCinemaApp() {
                         })
                         tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
                         tab == "Каталог" -> CatalogScreen(
-                            items = movies.map { it.copy(media_type = "movie") } + series.map { it.copy(media_type = "tv") },
-                            loading = loading,
+                            items = catalogItems,
+                            loading = catalogLoading,
+                            genres = catalogGenres,
                             filter = catalogFilter,
                             genreId = catalogGenre,
                             year = catalogYear,
@@ -359,6 +400,7 @@ private fun CatalogScreen(
     filter: String,
     onFilter: (String) -> Unit,
     onSelect: (MediaItem) -> Unit,
+    genres: List<TmdbGenre> = emptyList(),
     genreId: Int = 0,
     year: String = "Любой",
     onGenre: (Int) -> Unit = {},
@@ -366,14 +408,7 @@ private fun CatalogScreen(
     title: String = "Каталог"
 ) {
     val typeFilters = listOf("Все", "Фильмы", "Сериалы")
-    val genres = listOf(
-        0 to "Все жанры", 28 to "Боевики", 12 to "Приключения", 16 to "Мультфильмы",
-        35 to "Комедии", 80 to "Криминал", 99 to "Документальные", 18 to "Драмы",
-        10751 to "Семейные", 14 to "Фэнтези", 36 to "История", 27 to "Ужасы",
-        10402 to "Музыка", 9648 to "Детективы", 10749 to "Мелодрамы",
-        878 to "Фантастика", 10770 to "ТВ-фильмы", 53 to "Триллеры",
-        10752 to "Военные", 37 to "Вестерны"
-    )
+    val genreOptions = listOf(TmdbGenre(0, "Все жанры")) + genres
     val years = listOf("Любой", "2026", "2025", "2024", "2023", "2022", "2021", "2020")
     val filteredItems = items.filter { item ->
         val typeMatches = when (filter) {
@@ -398,9 +433,9 @@ private fun CatalogScreen(
         Text("Жанры", color = TextPrimary, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 18.dp, top = 12.dp, bottom = 4.dp))
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(genres) { entry ->
-                FilterChip(selected = genreId == entry.first, onClick = { onGenre(entry.first) },
-                    label = { Text(entry.second) },
+            items(genreOptions) { entry ->
+                FilterChip(selected = genreId == entry.id, onClick = { onGenre(entry.id) },
+                    label = { Text(entry.name) },
                     colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
             }
         }
