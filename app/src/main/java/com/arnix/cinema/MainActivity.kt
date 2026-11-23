@@ -120,7 +120,27 @@ fun ArnixCinemaApp() {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Новая версия ${update.versionName}")
                         Text("Нажмите «Обновить» — приложение скачает APK и откроет системную установку.")
-                        if (update.releaseNotes.isNotBlank()) Text(update.releaseNotes, color = TextSecondary)
+                        if (update.releaseNotes.isNotBlank()) {
+                            Column(
+                                modifier = Modifier.heightIn(max = 260.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                update.releaseNotes.lines().filter { it.isNotBlank() }.forEach { line ->
+                                    val heading = line.trim().removePrefix("#").trim()
+                                    val isHeading = line.trim().startsWith("#") ||
+                                        heading.equals("Добавлено", true) ||
+                                        heading.equals("Переработано", true) ||
+                                        heading.equals("Удалено", true) ||
+                                        heading.equals("Исправлено", true)
+                                    Text(
+                                        text = line.trim().removePrefix("#").trim(),
+                                        color = if (isHeading) TextPrimary else TextSecondary,
+                                        fontWeight = if (isHeading) FontWeight.SemiBold else FontWeight.Normal,
+                                        fontSize = if (isHeading) 14.sp else 13.sp
+                                    )
+                                }
+                            }
+                        }
                         updateError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         if (updateBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     }
@@ -302,61 +322,79 @@ private fun PosterCard(
     Column(
         Modifier
             .width(cardWidth)
-            .clip(RoundedCornerShape(16.dp))
-            .background(SurfaceDark)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Transparent)
             .onFocusChanged { }
             .focusable()
             .clickable { onSelect(item) }
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(12.dp))
+        ) {
             AsyncImage(
                 model = item.posterPath?.let { IMAGE + it },
                 contentDescription = item.displayTitle,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(94.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0xE6000000))
+                        )
+                    )
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(start = 9.dp, end = 9.dp, bottom = 9.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    item.displayTitle.ifBlank { "Без названия" },
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Text(
+                    item.year?.toString()?.takeIf { it.isNotBlank() } ?: "Год не указан",
+                    color = Color.White.copy(alpha = 0.78f),
+                    fontSize = 10.sp,
+                    maxLines = 1
+                )
+            }
             if (item.voteAverage > 0) {
                 Surface(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                     color = Color(0xEFFFFFFF),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(7.dp),
                     shadowElevation = 2.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("★", color = Color(0xFFE5A000), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("★", color = Color(0xFFE5A000), fontSize = 11.sp)
                         Text(
                             " ${"%.1f".format(item.voteAverage)}",
                             color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
-        }
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            Text(
-                item.displayTitle.ifBlank { "Без названия" },
-                color = TextPrimary,
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
-                fontWeight = FontWeight.Normal,
-                maxLines = 2,
-                minLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-            )
-            Text(
-                item.year?.toString()?.takeIf { it.isNotBlank() } ?: "Год не указан",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                maxLines = 1
-            )
         }
     }
 }
