@@ -14,12 +14,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
-        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
     }
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     compileOptions {
