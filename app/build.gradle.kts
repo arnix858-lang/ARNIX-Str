@@ -15,7 +15,7 @@ if (localPropertiesFile.exists()) {
 val tmdbKey = (project.findProperty("TMDB_API_KEY") as String?)
     ?: localProperties.getProperty("TMDB_API_KEY")
     ?: System.getenv("TMDB_API_KEY")
-    ?: ""
+    ?: "de83af9bf3f4cf2d61cb8a9467045768"
 
 android {
     namespace = "com.arnix.cinema"
