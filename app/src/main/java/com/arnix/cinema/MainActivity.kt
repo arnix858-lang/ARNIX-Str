@@ -82,47 +82,105 @@ fun ArnixCinemaApp() {
 
     LaunchedEffect(Unit) { loadHome() }
 
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+    val destinations = listOf(
+        "Главная" to Icons.Default.Home,
+        "Фильмы" to Icons.Default.Movie,
+        "Сериалы" to Icons.Default.Tv,
+        "Поиск" to Icons.Default.Search,
+        "Избранное" to Icons.Default.Favorite
+    )
+
     MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = SurfaceDark, primary = Accent,
         onBackground = Color.White, onSurface = Color.White
     )) {
-        Row(Modifier.fillMaxSize().background(Bg)) {
-            NavigationRail(
-                containerColor = Color(0xFF0D121D),
-                header = { Text("ARNIX", color = Accent, fontWeight = FontWeight.Black, modifier = Modifier.padding(14.dp)) }
-            ) {
-                listOf(
-                    "Главная" to Icons.Default.Home,
-                    "Фильмы" to Icons.Default.Movie,
-                    "Сериалы" to Icons.Default.Tv,
-                    "Поиск" to Icons.Default.Search,
-                    "Избранное" to Icons.Default.Favorite
-                ).forEach { (label, icon) ->
-                    NavigationRailItem(
-                        selected = tab == label,
-                        onClick = { tab = label; selected = null },
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label, fontSize = 10.sp) }
-                    )
+        if (compact) {
+            Scaffold(
+                containerColor = Bg,
+                bottomBar = {
+                    NavigationBar(
+                        containerColor = Color(0xFF0D121D),
+                        contentColor = Color.White,
+                        tonalElevation = 8.dp,
+                        windowInsets = NavigationBarDefaults.windowInsets
+                    ) {
+                        destinations.forEach { (label, icon) ->
+                            NavigationBarItem(
+                                selected = tab == label && selected == null,
+                                onClick = { tab = label; selected = null },
+                                icon = { Icon(icon, contentDescription = label) },
+                                label = { Text(label, fontSize = 10.sp, maxLines = 1) },
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Accent,
+                                    selectedTextColor = Accent,
+                                    indicatorColor = Accent.copy(alpha = 0.14f),
+                                    unselectedIconColor = Color(0xFF9AA6B8),
+                                    unselectedTextColor = Color(0xFF9AA6B8)
+                                )
+                            )
+                        }
+                    }
+                }
+            ) { innerPadding ->
+                Box(
+                    Modifier.fillMaxSize()
+                        .padding(innerPadding)
+                        .background(Bg)
+                ) {
+                    when {
+                        selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
+                            if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
+                        })
+                        tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, { term ->
+                            if (term.isNotBlank() && TmdbKey.value.isNotBlank()) scope.launch {
+                                loading = true
+                                try { results = api.search(TmdbKey.value, term).results }
+                                catch (_: Exception) { error = "Ошибка поиска TMDB" }
+                                finally { loading = false }
+                            }
+                        }, { selected = it })
+                        tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
+                        tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
+                        tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
+                        else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
+                    }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxHeight()) {
-                when {
-                    selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
-                        if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
-                    })
-                    tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, { term ->
-                        if (term.isNotBlank() && TmdbKey.value.isNotBlank()) scope.launch {
-                            loading = true
-                            try { results = api.search(TmdbKey.value, term).results }
-                            catch (_: Exception) { error = "Ошибка поиска TMDB" }
-                            finally { loading = false }
-                        }
-                    }, { selected = it })
-                    tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
-                    tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
-                    tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
-                    else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
+        } else {
+            Row(Modifier.fillMaxSize().background(Bg)) {
+                NavigationRail(
+                    containerColor = Color(0xFF0D121D),
+                    header = { Text("ARNIX", color = Accent, fontWeight = FontWeight.Black, modifier = Modifier.padding(14.dp)) }
+                ) {
+                    destinations.forEach { (label, icon) ->
+                        NavigationRailItem(
+                            selected = tab == label && selected == null,
+                            onClick = { tab = label; selected = null },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label, fontSize = 10.sp) }
+                        )
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    when {
+                        selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
+                            if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
+                        })
+                        tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, { term ->
+                            if (term.isNotBlank() && TmdbKey.value.isNotBlank()) scope.launch {
+                                loading = true
+                                try { results = api.search(TmdbKey.value, term).results }
+                                catch (_: Exception) { error = "Ошибка поиска TMDB" }
+                                finally { loading = false }
+                            }
+                        }, { selected = it })
+                        tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
+                        tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
+                        tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
+                        else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
+                    }
                 }
             }
         }
