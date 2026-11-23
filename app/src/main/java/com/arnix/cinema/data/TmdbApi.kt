@@ -13,6 +13,9 @@ data class TmdbPage<T>(
     val results: List<T> = emptyList()
 )
 
+data class TmdbGenre(val id: Int, val name: String)
+data class TmdbGenreResponse(val genres: List<TmdbGenre> = emptyList())
+
 data class MediaItem(
     val id: Int,
     val title: String? = null,
@@ -39,6 +42,32 @@ interface TmdbApi {
 
     @GET("tv/popular")
     suspend fun tv(@Query("api_key") key: String, @Query("language") language: String = "ru-RU", @Query("page") page: Int = 1): TmdbPage<MediaItem>
+
+    @GET("genre/movie/list")
+    suspend fun movieGenres(@Query("api_key") key: String, @Query("language") language: String = "ru-RU"): TmdbGenreResponse
+
+    @GET("genre/tv/list")
+    suspend fun tvGenres(@Query("api_key") key: String, @Query("language") language: String = "ru-RU"): TmdbGenreResponse
+
+    @GET("discover/movie")
+    suspend fun discoverMovies(
+        @Query("api_key") key: String,
+        @Query("language") language: String = "ru-RU",
+        @Query("with_genres") genreId: Int? = null,
+        @Query("primary_release_year") year: Int? = null,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("page") page: Int = 1
+    ): TmdbPage<MediaItem>
+
+    @GET("discover/tv")
+    suspend fun discoverTv(
+        @Query("api_key") key: String,
+        @Query("language") language: String = "ru-RU",
+        @Query("with_genres") genreId: Int? = null,
+        @Query("first_air_date_year") year: Int? = null,
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("page") page: Int = 1
+    ): TmdbPage<MediaItem>
 
     @GET("search/multi")
     suspend fun search(@Query("api_key") key: String, @Query("query") query: String, @Query("language") language: String = "ru-RU"): TmdbPage<MediaItem>
