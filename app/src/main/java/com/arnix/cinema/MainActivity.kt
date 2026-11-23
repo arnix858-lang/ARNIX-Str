@@ -70,6 +70,8 @@ fun ArnixCinemaApp() {
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var query by remember { mutableStateOf("") }
     var catalogFilter by remember { mutableStateOf("Все") }
+    var catalogGenre by remember { mutableStateOf(0) }
+    var catalogYear by remember { mutableStateOf("Любой") }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -251,10 +253,17 @@ fun ArnixCinemaApp() {
                             items = movies.map { it.copy(media_type = "movie") } + series.map { it.copy(media_type = "tv") },
                             loading = loading,
                             filter = catalogFilter,
+                            genreId = catalogGenre,
+                            year = catalogYear,
                             onFilter = { catalogFilter = it },
+                            onGenre = { catalogGenre = it },
+                            onYear = { catalogYear = it },
                             onSelect = { selected = it }
                         )
-                        tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
+                        tab == "Избранное" -> CatalogScreen(
+                            items = favorites, loading = false, filter = "Все",
+                            onFilter = {}, onSelect = { selected = it }, title = "Избранное"
+                        )
                         else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
                     }
                 }
@@ -284,10 +293,17 @@ fun ArnixCinemaApp() {
                             items = movies.map { it.copy(media_type = "movie") } + series.map { it.copy(media_type = "tv") },
                             loading = loading,
                             filter = catalogFilter,
+                            genreId = catalogGenre,
+                            year = catalogYear,
                             onFilter = { catalogFilter = it },
+                            onGenre = { catalogGenre = it },
+                            onYear = { catalogYear = it },
                             onSelect = { selected = it }
                         )
-                        tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
+                        tab == "Избранное" -> CatalogScreen(
+                            items = favorites, loading = false, filter = "Все",
+                            onFilter = {}, onSelect = { selected = it }, title = "Избранное"
+                        )
                         else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
                     }
                 }
