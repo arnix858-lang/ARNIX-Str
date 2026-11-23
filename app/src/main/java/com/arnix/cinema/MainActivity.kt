@@ -35,9 +35,12 @@ import com.arnix.cinema.data.MediaItem
 import com.arnix.cinema.data.TmdbApi
 import kotlinx.coroutines.launch
 
-private val Bg = Color(0xFF080B12)
-private val SurfaceDark = Color(0xFF141A27)
-private val Accent = Color(0xFF54C7F5)
+private val Bg = Color(0xFFF5F7FB)
+private val SurfaceDark = Color(0xFFFFFFFF)
+private val Accent = Color(0xFF087FB5)
+private val TextPrimary = Color(0xFF172333)
+private val TextSecondary = Color(0xFF657386)
+private val BorderSoft = Color(0xFFE4EAF1)
 private const val IMAGE = "https://image.tmdb.org/t/p/w500"
 
 class MainActivity : ComponentActivity() {
@@ -91,17 +94,19 @@ fun ArnixCinemaApp() {
         "Избранное" to Icons.Default.Favorite
     )
 
-    MaterialTheme(colorScheme = darkColorScheme(
+    MaterialTheme(colorScheme = lightColorScheme(
         background = Bg, surface = SurfaceDark, primary = Accent,
-        onBackground = Color.White, onSurface = Color.White
+        onBackground = TextPrimary, onSurface = TextPrimary,
+        surfaceVariant = Color(0xFFEEF3F8), onSurfaceVariant = TextSecondary,
+        outline = BorderSoft
     )) {
         if (compact) {
             Scaffold(
                 containerColor = Bg,
                 bottomBar = {
                     NavigationBar(
-                        containerColor = Color(0xFF0D121D),
-                        contentColor = Color.White,
+                        containerColor = Color.White,
+                        contentColor = TextPrimary,
                         tonalElevation = 8.dp,
                         windowInsets = NavigationBarDefaults.windowInsets
                     ) {
@@ -116,8 +121,8 @@ fun ArnixCinemaApp() {
                                     selectedIconColor = Accent,
                                     selectedTextColor = Accent,
                                     indicatorColor = Accent.copy(alpha = 0.14f),
-                                    unselectedIconColor = Color(0xFF9AA6B8),
-                                    unselectedTextColor = Color(0xFF9AA6B8)
+                                    unselectedIconColor = TextSecondary,
+                                    unselectedTextColor = TextSecondary
                                 )
                             )
                         }
@@ -194,16 +199,16 @@ private fun HomeScreen(
 ) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item {
-            Box(Modifier.fillMaxWidth().height(290.dp)) {
+            Box(Modifier.fillMaxWidth().height(270.dp)) {
                 val hero = trending.firstOrNull()
                 if (hero?.backdropPath != null) AsyncImage(
                     IMAGE.replace("w500", "w1280") + hero.backdropPath,
                     contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
                 )
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Bg))))
-                Column(Modifier.align(Alignment.BottomStart).padding(24.dp)) {
+                Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 18.dp, vertical = 20.dp)) {
                     Text("ARNIX CINEMA", color = Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                    Text(hero?.displayTitle ?: "Ваш мир кино", fontSize = 30.sp, fontWeight = FontWeight.Black, color = Color.White)
+                    Text(hero?.displayTitle ?: "Ваш мир кино", fontSize = 27.sp, lineHeight = 32.sp, fontWeight = FontWeight.Black, color = Color.White, maxLines = 2)
                     Text("Фильмы • Сериалы • Мультфильмы", color = Color.LightGray)
                     if (hero != null) Button(onClick = { onSelect(hero) }, modifier = Modifier.padding(top = 12.dp)) { Text("Подробнее") }
                 }
@@ -220,7 +225,7 @@ private fun HomeScreen(
 @Composable
 private fun MediaRow(title: String, items: List<MediaItem>, onSelect: (MediaItem) -> Unit) {
     Column(Modifier.padding(top = 18.dp)) {
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        Text(title, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(items) { item -> PosterCard(item, onSelect) }
         }
@@ -230,29 +235,84 @@ private fun MediaRow(title: String, items: List<MediaItem>, onSelect: (MediaItem
 @Composable
 private fun CatalogScreen(title: String, items: List<MediaItem>, loading: Boolean, onSelect: (MediaItem) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(24.dp))
+        Text(title, color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 12.dp))
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-            columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(130.dp),
-            contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) { items(items) { PosterCard(it, onSelect, width = 140.dp) } }
+            columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(142.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 28.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) { items(items) { PosterCard(it, onSelect) } }
     }
 }
 
 @Composable
-private fun PosterCard(item: MediaItem, onSelect: (MediaItem) -> Unit, width: androidx.compose.ui.unit.Dp = 120.dp) {
-    var focused by remember { mutableStateOf(false) }
-    Column(Modifier.width(width).clip(RoundedCornerShape(12.dp)).background(SurfaceDark)
-        .onFocusChanged { focused = it.isFocused }.focusable().clickable { onSelect(item) }) {
-        AsyncImage(
-            model = item.posterPath?.let { IMAGE + it },
-            contentDescription = item.displayTitle,
-            modifier = Modifier.fillMaxWidth().height(180.dp),
-            contentScale = ContentScale.Crop
-        )
-        Text(item.displayTitle, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.padding(8.dp))
-        Text("★ ${"%.1f".format(item.voteAverage)}  ${item.year}", color = Accent, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
+private fun PosterCard(
+    item: MediaItem,
+    onSelect: (MediaItem) -> Unit,
+    width: androidx.compose.ui.unit.Dp = 136.dp
+) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val cardWidth = if (configuration.screenWidthDp < 360) 116.dp else width
+    Column(
+        Modifier
+            .width(cardWidth)
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceDark)
+            .onFocusChanged { }
+            .focusable()
+            .clickable { onSelect(item) }
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+            AsyncImage(
+                model = item.posterPath?.let { IMAGE + it },
+                contentDescription = item.displayTitle,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            if (item.voteAverage > 0) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
+                    color = Color(0xEFFFFFFF),
+                    shape = RoundedCornerShape(8.dp),
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("★", color = Color(0xFFE5A000), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            " ${"%.1f".format(item.voteAverage)}",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                item.displayTitle.ifBlank { "Без названия" },
+                color = TextPrimary,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                minLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Text(
+                item.year?.toString()?.takeIf { it.isNotBlank() } ?: "Год не указан",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -262,7 +322,7 @@ private fun SearchScreen(
     onSearch: (String) -> Unit, onSelect: (MediaItem) -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Text("Поиск фильмов и сериалов", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text("Поиск фильмов и сериалов", color = TextPrimary, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(query, onQuery, modifier = Modifier.weight(1f), label = { Text("Название") }, singleLine = true)
             Button(onClick = { onSearch(query) }, modifier = Modifier.padding(start = 8.dp)) { Text("Найти") }
@@ -291,15 +351,15 @@ private fun DetailScreen(item: MediaItem, onBack: () -> Unit, onFavorite: () -> 
         }
         item {
             Column(Modifier.padding(22.dp)) {
-                Text(item.displayTitle, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                Text(item.displayTitle, color = TextPrimary, fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Black)
                 Text("★ ${"%.1f".format(item.voteAverage)}   ${item.year}", color = Accent, modifier = Modifier.padding(top = 8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 16.dp)) {
                     Button(onClick = onFavorite) { Icon(Icons.Default.Favorite, null); Text(" В избранное") }
                     OutlinedButton(onClick = {}) { Text("Трейлер") }
                 }
-                Text("Описание", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text(item.overview?.ifBlank { "Описание пока отсутствует." } ?: "Описание пока отсутствует.", color = Color.LightGray, modifier = Modifier.padding(top = 8.dp))
-                Text("Информация предоставлена TMDB. Видеопотоки не входят в каталог.", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 24.dp))
+                Text("Описание", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(item.overview?.ifBlank { "Описание пока отсутствует." } ?: "Описание пока отсутствует.", color = TextSecondary, modifier = Modifier.padding(top = 8.dp))
+                Text("Информация предоставлена TMDB. Видеопотоки не входят в каталог.", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 24.dp))
             }
         }
     }
