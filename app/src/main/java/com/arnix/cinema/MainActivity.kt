@@ -69,6 +69,7 @@ fun ArnixCinemaApp() {
     var series by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var results by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var query by remember { mutableStateOf("") }
+    var catalogFilter by remember { mutableStateOf("Все") }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -127,8 +128,7 @@ fun ArnixCinemaApp() {
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val destinations = listOf(
         "Главная" to Icons.Default.Home,
-        "Фильмы" to Icons.Default.Movie,
-        "Сериалы" to Icons.Default.Tv,
+        "Каталог" to Icons.Default.Movie,
         "Поиск" to Icons.Default.Search,
         "Избранное" to Icons.Default.Favorite
     )
@@ -247,8 +247,13 @@ fun ArnixCinemaApp() {
                             if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                         })
                         tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
-                        tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
-                        tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
+                        tab == "Каталог" -> CatalogScreen(
+                            items = movies.map { it.copy(media_type = "movie") } + series.map { it.copy(media_type = "tv") },
+                            loading = loading,
+                            filter = catalogFilter,
+                            onFilter = { catalogFilter = it },
+                            onSelect = { selected = it }
+                        )
                         tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
                         else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
                     }
@@ -275,8 +280,13 @@ fun ArnixCinemaApp() {
                             if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                         })
                         tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
-                        tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
-                        tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
+                        tab == "Каталог" -> CatalogScreen(
+                            items = movies.map { it.copy(media_type = "movie") } + series.map { it.copy(media_type = "tv") },
+                            loading = loading,
+                            filter = catalogFilter,
+                            onFilter = { catalogFilter = it },
+                            onSelect = { selected = it }
+                        )
                         tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
                         else -> HomeScreen(trending, movies, series, loading, error, { selected = it })
                     }
@@ -327,16 +337,59 @@ private fun MediaRow(title: String, items: List<MediaItem>, onSelect: (MediaItem
 }
 
 @Composable
-private fun CatalogScreen(title: String, items: List<MediaItem>, loading: Boolean, onSelect: (MediaItem) -> Unit) {
+private fun CatalogScreen(
+    items: List<MediaItem>,
+    loading: Boolean,
+    filter: String,
+    onFilter: (String) -> Unit,
+    onSelect: (MediaItem) -> Unit
+) {
+    val filters = listOf("Все", "Фильмы", "Сериалы", "Мультфильмы")
+    val filteredItems = when (filter) {
+        "Фильмы" -> items.filter { it.media_type == "movie" }
+        "Сериалы" -> items.filter { it.media_type == "tv" }
+        "Мультфильмы" -> items.filter { 16 in it.genre_ids }
+        else -> items
+    }
+
     Column(Modifier.fillMaxSize()) {
-        Text(title, color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 12.dp))
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Text(
+            "Каталог",
+            color = TextPrimary,
+            fontSize = 25.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 12.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(filters) { option ->
+                FilterChip(
+                    selected = filter == option,
+                    onClick = { onFilter(option) },
+                    label = { Text(option) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Accent.copy(alpha = 0.14f),
+                        selectedLabelColor = Accent
+                    )
+                )
+            }
+        }
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+        if (!loading && filteredItems.isEmpty()) {
+            Text(
+                "В этой категории пока нет фильмов",
+                color = TextSecondary,
+                modifier = Modifier.padding(20.dp)
+            )
+        }
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(142.dp),
-            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 28.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 28.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) { items(items) { PosterCard(it, onSelect) } }
+        ) { items(filteredItems) { PosterCard(it, onSelect) } }
     }
 }
 
