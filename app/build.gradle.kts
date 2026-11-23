@@ -1,21 +1,8 @@
-import java.util.Properties
-import java.io.FileInputStream
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
-
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    FileInputStream(localPropertiesFile).use { localProperties.load(it) }
-}
-val tmdbKey = (project.findProperty("TMDB_API_KEY") as String?)
-    ?: localProperties.getProperty("TMDB_API_KEY")
-    ?: System.getenv("TMDB_API_KEY")
-    ?: "de83af9bf3f4cf2d61cb8a9467045768"
 
 android {
     namespace = "com.arnix.cinema"
