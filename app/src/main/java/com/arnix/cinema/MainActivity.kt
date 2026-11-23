@@ -38,6 +38,7 @@ import com.arnix.cinema.data.TmdbApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
 private val Bg = Color(0xFFF5F7FB)
 private val SurfaceDark = Color(0xFFFFFFFF)
@@ -95,6 +96,31 @@ fun ArnixCinemaApp() {
         loadHome()
         updateInfo = withContext(Dispatchers.IO) {
             runCatching { AppUpdater.checkForUpdate(context) }.getOrNull()
+        }
+    }
+
+    LaunchedEffect(tab, query) {
+        val term = query.trim()
+        if (tab != "Поиск") return@LaunchedEffect
+        if (term.length < 2) {
+            results = emptyList()
+            loading = false
+            return@LaunchedEffect
+        }
+        delay(450)
+        if (TmdbKey.value.isBlank()) {
+            error = "Добавьте TMDB_API_KEY в настройках сборки."
+            return@LaunchedEffect
+        }
+        loading = true
+        error = null
+        try {
+            results = api.search(TmdbKey.value, term).results
+        } catch (_: Exception) {
+            error = "Не удалось выполнить поиск. Проверьте интернет."
+            results = emptyList()
+        } finally {
+            loading = false
         }
     }
 
@@ -220,14 +246,7 @@ fun ArnixCinemaApp() {
                         selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
                             if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                         })
-                        tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, { term ->
-                            if (term.isNotBlank() && TmdbKey.value.isNotBlank()) scope.launch {
-                                loading = true
-                                try { results = api.search(TmdbKey.value, term).results }
-                                catch (_: Exception) { error = "Ошибка поиска TMDB" }
-                                finally { loading = false }
-                            }
-                        }, { selected = it })
+                        tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
                         tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
                         tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
                         tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
@@ -255,14 +274,7 @@ fun ArnixCinemaApp() {
                         selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
                             if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                         })
-                        tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, { term ->
-                            if (term.isNotBlank() && TmdbKey.value.isNotBlank()) scope.launch {
-                                loading = true
-                                try { results = api.search(TmdbKey.value, term).results }
-                                catch (_: Exception) { error = "Ошибка поиска TMDB" }
-                                finally { loading = false }
-                            }
-                        }, { selected = it })
+                        tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
                         tab == "Фильмы" -> CatalogScreen("Популярные фильмы", movies, loading, { selected = it })
                         tab == "Сериалы" -> CatalogScreen("Популярные сериалы", series, loading, { selected = it })
                         tab == "Избранное" -> CatalogScreen("Избранное", favorites, false, { selected = it })
@@ -419,18 +431,42 @@ private fun PosterCard(
 @Composable
 private fun SearchScreen(
     query: String, onQuery: (String) -> Unit, results: List<MediaItem>, loading: Boolean,
-    onSearch: (String) -> Unit, onSelect: (MediaItem) -> Unit
+    error: String?, onSelect: (MediaItem) -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Text("Поиск фильмов и сериалов", color = TextPrimary, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold)
-        Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(query, onQuery, modifier = Modifier.weight(1f), label = { Text("Название") }, singleLine = true)
-            Button(onClick = { onSearch(query) }, modifier = Modifier.padding(start = 8.dp)) { Text("Найти") }
-        }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQuery,
+            modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
+            label = { Text("Название фильма или сериала") },
+            placeholder = { Text("Начните вводить название…") },
+            singleLine = true,
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQuery("") }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Очистить поиск")
+                    }
+                }
+            }
+        )
+        Text(
+            text = when {
+                query.trim().length < 2 -> "Введите минимум 2 символа — поиск начнётся автоматически"
+                loading -> "Ищем…"
+                error != null -> error
+                results.isEmpty() -> "Ничего не найдено"
+                else -> "Найдено: ${results.size}"
+            },
+            color = if (error != null) MaterialTheme.colorScheme.error else TextSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+        )
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(130.dp),
-            contentPadding = PaddingValues(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 18.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) { items(results) { PosterCard(it, onSelect, 140.dp) } }
     }
