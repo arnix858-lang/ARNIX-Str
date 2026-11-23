@@ -63,7 +63,7 @@ fun ArnixCinemaApp() {
     val favorites = remember { mutableStateListOf<MediaItem>() }
 
     fun loadHome() {
-        if (BuildConfig.TMDB_API_KEY.isBlank()) {
+        if (TmdbKey.value.isBlank()) {
             error = "Добавьте TMDB_API_KEY в local.properties или секреты GitHub Actions."
             return
         }
@@ -71,9 +71,9 @@ fun ArnixCinemaApp() {
             loading = true
             error = null
             try {
-                trending = api.trending(BuildConfig.TMDB_API_KEY).results
-                movies = api.movies(BuildConfig.TMDB_API_KEY).results
-                series = api.tv(BuildConfig.TMDB_API_KEY).results
+                trending = api.trending(TmdbKey.value).results
+                movies = api.movies(TmdbKey.value).results
+                series = api.tv(TmdbKey.value).results
             } catch (e: Exception) {
                 error = "Не удалось загрузить каталог. Проверьте интернет и TMDB API-ключ."
             } finally { loading = false }
@@ -112,9 +112,9 @@ fun ArnixCinemaApp() {
                         if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                     })
                     tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, { term ->
-                        if (term.isNotBlank() && BuildConfig.TMDB_API_KEY.isNotBlank()) scope.launch {
+                        if (term.isNotBlank() && TmdbKey.value.isNotBlank()) scope.launch {
                             loading = true
-                            try { results = api.search(BuildConfig.TMDB_API_KEY, term).results }
+                            try { results = api.search(TmdbKey.value, term).results }
                             catch (_: Exception) { error = "Ошибка поиска TMDB" }
                             finally { loading = false }
                         }
