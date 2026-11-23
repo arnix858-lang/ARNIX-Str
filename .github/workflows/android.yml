@@ -50,8 +50,6 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: ARNIX Cinema 1.0.${{ github.run_number }}
-          body: |
-            Новая версия ARNIX Cinema.
-            Установите APK вручную или обновитесь через встроенное окно приложения.
+          body_path: RELEASE_NOTES.md
           files: app/build/outputs/apk/release/ARNIX-Cinema.apk
           fail_on_unmatched_files: true
