@@ -358,51 +358,69 @@ private fun CatalogScreen(
     loading: Boolean,
     filter: String,
     onFilter: (String) -> Unit,
-    onSelect: (MediaItem) -> Unit
+    onSelect: (MediaItem) -> Unit,
+    genreId: Int = 0,
+    year: String = "Любой",
+    onGenre: (Int) -> Unit = {},
+    onYear: (String) -> Unit = {},
+    title: String = "Каталог"
 ) {
-    val filters = listOf("Все", "Фильмы", "Сериалы", "Мультфильмы")
-    val filteredItems = when (filter) {
-        "Фильмы" -> items.filter { it.media_type == "movie" }
-        "Сериалы" -> items.filter { it.media_type == "tv" }
-        "Мультфильмы" -> items.filter { 16 in it.genre_ids }
-        else -> items
+    val typeFilters = listOf("Все", "Фильмы", "Сериалы")
+    val genres = listOf(
+        0 to "Все жанры", 28 to "Боевики", 12 to "Приключения", 16 to "Мультфильмы",
+        35 to "Комедии", 80 to "Криминал", 99 to "Документальные", 18 to "Драмы",
+        10751 to "Семейные", 14 to "Фэнтези", 36 to "История", 27 to "Ужасы",
+        10402 to "Музыка", 9648 to "Детективы", 10749 to "Мелодрамы",
+        878 to "Фантастика", 10770 to "ТВ-фильмы", 53 to "Триллеры",
+        10752 to "Военные", 37 to "Вестерны"
+    )
+    val years = listOf("Любой", "2026", "2025", "2024", "2023", "2022", "2021", "2020")
+    val filteredItems = items.filter { item ->
+        val typeMatches = when (filter) {
+            "Фильмы" -> item.media_type == "movie"
+            "Сериалы" -> item.media_type == "tv"
+            else -> true
+        }
+        val genreMatches = genreId == 0 || genreId in item.genre_ids
+        val yearMatches = year == "Любой" || item.year == year
+        typeMatches && genreMatches && yearMatches
     }
 
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "Каталог",
-            color = TextPrimary,
-            fontSize = 25.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 12.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filters) { option ->
-                FilterChip(
-                    selected = filter == option,
-                    onClick = { onFilter(option) },
-                    label = { Text(option) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Accent.copy(alpha = 0.14f),
-                        selectedLabelColor = Accent
-                    )
-                )
+        Text(title, color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 12.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(typeFilters) { option ->
+                FilterChip(selected = filter == option, onClick = { onFilter(option) }, label = { Text(option) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
+            }
+        }
+        Text("Жанры", color = TextPrimary, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 18.dp, top = 12.dp, bottom = 4.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(genres) { entry ->
+                FilterChip(selected = genreId == entry.first, onClick = { onGenre(entry.first) },
+                    label = { Text(entry.second) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
+            }
+        }
+        Text("Год выпуска", color = TextPrimary, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 18.dp, top = 8.dp, bottom = 4.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(years) { option ->
+                FilterChip(selected = year == option, onClick = { onYear(option) }, label = { Text(option) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
             }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+        Text("${filteredItems.size} результатов", color = TextSecondary, fontSize = 12.sp,
+            modifier = Modifier.padding(start = 18.dp, top = 8.dp))
         if (!loading && filteredItems.isEmpty()) {
-            Text(
-                "В этой категории пока нет фильмов",
-                color = TextSecondary,
-                modifier = Modifier.padding(20.dp)
-            )
+            Text("По выбранным фильтрам ничего не найдено", color = TextSecondary, modifier = Modifier.padding(20.dp))
         }
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(142.dp),
-            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 28.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 28.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) { items(filteredItems) { PosterCard(it, onSelect) } }
