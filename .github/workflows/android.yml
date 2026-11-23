@@ -43,6 +43,8 @@ jobs:
           name: ARNIX-Cinema-release
           path: app/build/outputs/apk/release/app-release.apk
 
+      - name: Prepare update APK filename
+        run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/ARNIX-Cinema.apk
       - name: Publish APK as GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -51,5 +53,5 @@ jobs:
           body: |
             Новая версия ARNIX Cinema.
             Установите APK вручную или обновитесь через встроенное окно приложения.
-          files: app/build/outputs/apk/release/app-release.apk
+          files: app/build/outputs/apk/release/ARNIX-Cinema.apk
           fail_on_unmatched_files: true
