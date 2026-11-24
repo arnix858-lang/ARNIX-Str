@@ -30,7 +30,7 @@ def valid_catalog_url(value: str) -> bool:
     parsed = urlparse(value)
     host = (parsed.hostname or "").lower()
     allowed = (urlparse(HDREZKA_HOST).hostname or "").lower()
-    return parsed.scheme == "https" and (host == allowed or host.endswith("." + allowed))
+    return parsed.scheme == "https" and (host in {"hdrezka.ag", "rezka.ag"} or host == allowed or host.endswith("." + allowed))
 
 def item_json(item):
     info = item.info
@@ -41,7 +41,7 @@ def item_json(item):
         "description": "",
         "year": str(getattr(info, "year", "") or ""),
         "rating": 0.0,
-        "category": str(getattr(info, "genre", "") or ""),
+        "category": ", ".join(x.strip() for x in str(getattr(info, "genre", "") or "").split(",") if x.strip()),
     }
 
 @app.get("/health")
@@ -54,7 +54,7 @@ async def catalog(category: str = "Фильмы", page: int = Query(1, ge=1, le=
     try:
         async with HDRezkaClient(host=HDREZKA_HOST) as client:
             items = await client.page(path).get_page(page)
-            results = [item_json(x) for x in items if x.name and x.url and x.poster]
+            results = [item_json(x) for x in items if x.name and x.url]
             return {"results": results, "page": page, "category": category, "count": len(results)}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"HDRezka catalog unavailable: {type(exc).__name__}") from exc
@@ -64,7 +64,7 @@ async def search(q: str = Query(min_length=2, max_length=120), page: int = Query
     try:
         async with HDRezkaClient(host=HDREZKA_HOST) as client:
             items = await client.search(q).get_page(page)
-            return {"results": [item_json(x) for x in items if x.name and x.url and x.poster], "page": page}
+            return {"results": [item_json(x) for x in items if x.name and x.url], "page": page}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"HDRezka search failed: {type(exc).__name__}") from exc
 
@@ -76,15 +76,17 @@ async def details(url: str):
         async with HDRezkaClient(host=HDREZKA_HOST) as client:
             post = await client.post(url)
             info = post.info
-            rating = getattr(getattr(info, "ratings", {}).get("hdrezka"), "rating", 0.0)
-            votes = getattr(getattr(info, "ratings", {}).get("hdrezka"), "votes", 0)
+            rating_data = (getattr(info, "ratings", {}) or {}).get("hdrezka")
+            poster_data = getattr(info, "poster", None)
+            poster_url = (getattr(poster_data, "full", "") or getattr(poster_data, "preview", "")) if poster_data else ""
+            votes = getattr(rating_data, "votes", 0)
             return {
                 "title": str(post.name or getattr(info, "title", "")),
                 "description": str(getattr(info, "description", "") or ""),
-                "poster": str(getattr(info, "poster", "") or ""),
-                "rating": float(rating or 0),
+                "poster": str(poster_url or ""),
+                "rating": float(getattr(rating_data, "rating", 0.0) or 0.0),
                 "votes": int(votes or 0),
-                "category": ", ".join(str(x.name) for x in getattr(info, "genre", ()) if getattr(x, "name", "")),
+                "category": ", ".join(str(x) for x in getattr(info, "genre", ()) if str(x)),
                 "type": str(post.type or ""),
                 "seasons": [],
             }
