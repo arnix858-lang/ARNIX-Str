@@ -1,14 +1,11 @@
 package com.arnix.cinema.data
 
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.GET
-import retrofit2.http.Query
-
-// Replace with the deployed Render URL when the service is live.
-object HdRezkaConfig {
-    const val BASE_URL = "https://arnix-cinema-hdrezka-api.onrender.com/"
-}
+import android.content.Context
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class RezkaSearchResponse(val results: List<RezkaSearchItem> = emptyList())
 data class RezkaSearchItem(
@@ -25,21 +22,35 @@ data class RezkaStreamResponse(
     val subtitles: List<RezkaSubtitle> = emptyList()
 )
 
-interface HdRezkaService {
-    @GET("search")
-    suspend fun search(@Query("q") query: String): RezkaSearchResponse
+/**
+ * Runs the upstream HdRezkaApi Python parser inside this app's embedded
+ * Python runtime. No external ARNIX API server or user-installed runtime
+ * is required. Network access to the source website is still required.
+ */
+class HdRezkaService private constructor(context: Context) {
+    private val gson = Gson()
+    private val appContext = context.applicationContext
 
-    @GET("stream")
-    suspend fun stream(
-        @Query("url") url: String,
-        @Query("translation") translation: String? = null
-    ): RezkaStreamResponse
+    private fun pythonModule() : com.chaquo.python.PyObject {
+        if (!Python.isStarted()) {
+            Python.start(AndroidPlatform(appContext))
+        }
+        return Python.getInstance().getModule("arnix_rezka")
+    }
+
+    suspend fun search(query: String): RezkaSearchResponse = withContext(Dispatchers.IO) {
+        require(query.trim().length >= 2) { "Введите минимум 2 символа" }
+        val json = pythonModule().callAttr("search_json", query.trim()).toString()
+        gson.fromJson(json, RezkaSearchResponse::class.java)
+    }
+
+    suspend fun stream(url: String, translation: String? = null): RezkaStreamResponse =
+        withContext(Dispatchers.IO) {
+            val json = pythonModule().callAttr("stream_json", url, translation).toString()
+            gson.fromJson(json, RezkaStreamResponse::class.java)
+        }
 
     companion object {
-        fun create(): HdRezkaService = Retrofit.Builder()
-            .baseUrl(HdRezkaConfig.BASE_URL)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(HdRezkaService::class.java)
+        fun create(context: Context): HdRezkaService = HdRezkaService(context)
     }
 }
