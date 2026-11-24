@@ -793,7 +793,6 @@ private fun DetailScreen(
     val rating = info?.voteAverage?.takeIf { it > 0 } ?: item.voteAverage
     val year = info?.year?.ifBlank { item.year } ?: item.year
     val scroll = rememberScrollState()
-    val context = LocalContext.current
 
     BackHandler(onBack = onBack)
 
