@@ -44,6 +44,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.rtsp.RtspMediaSource
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.arnix.cinema.data.*
@@ -351,7 +352,11 @@ fun ArnixCinemaApp() {
                 val mediaItem = PlayerMediaItem.Builder().setUri(stream.url)
                     .setMimeType(detectStreamMime(stream.url)).build()
                 ExoPlayer.Builder(context).setMediaSourceFactory(mediaFactory).build().apply {
-                    setMediaItem(mediaItem)
+                    if (stream.url.startsWith("rtsp://", ignoreCase = true)) {
+                        setMediaSource(RtspMediaSource.Factory().createMediaSource(mediaItem))
+                    } else {
+                        setMediaSource(mediaFactory.createMediaSource(mediaItem))
+                    }
                     prepare()
                     playWhenReady = true
                 }
