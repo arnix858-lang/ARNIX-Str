@@ -154,11 +154,20 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
                 if (clarification) append("&clarification=1&similar=true")
             }
             val found = mutableListOf<LampacStream>()
-            val body = get(appendQuery(endpoint, query(false)))
-            parseJson(body, provider.name)?.let { collectStreams(it, provider.name, found, 0) }
+            val bodies = mutableListOf<String>()
+            bodies.add(get(appendQuery(endpoint, query(false))))
+            parseJson(bodies.last(), provider.name)?.let { collectStreams(it, provider.name, found, 0) }
             if (found.isEmpty()) {
-                val second = get(appendQuery(endpoint, query(true)))
-                parseJson(second, provider.name)?.let { collectStreams(it, provider.name, found, 0) }
+                bodies.add(get(appendQuery(endpoint, query(true))))
+                parseJson(bodies.last(), provider.name)?.let { collectStreams(it, provider.name, found, 0) }
+            }
+            // Lampac may first return a title/voice selection. Follow its own /lite/* action URLs.
+            val actions = linkedSetOf<String>()
+            bodies.forEach { body -> parseJson(body, provider.name)?.let { collectActionUrls(it, actions, 0) } }
+            for (action in actions.take(8)) {
+                if (found.isNotEmpty()) break
+                val nested = get(appendQuery(secureLampac(action), "rjson=true"))
+                parseJson(nested, provider.name)?.let { collectStreams(it, provider.name, found, 0) }
             }
             found.distinctBy { it.url }
         }
@@ -186,6 +195,23 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
     }
     private fun JSONObjectOrNull(body: String) = runCatching { JSONObject(body) }.getOrNull()
     private fun JSONArrayOrNull(body: String) = runCatching { JSONArray(body) }.getOrNull()
+
+    private fun collectActionUrls(value: Any?, output: MutableSet<String>, depth: Int) {
+        if (depth > 12) return
+        when (value) {
+            is JSONObject -> {
+                val keys = value.keys()
+                while (keys.hasNext()) collectActionUrls(value.opt(keys.next()), output, depth + 1)
+            }
+            is JSONArray -> for (i in 0 until value.length()) collectActionUrls(value.opt(i), output, depth + 1)
+            is String -> {
+                val v = value.trim()
+                if ((v.startsWith("http://") || v.startsWith("https://")) && v.contains("/lite/") && !isPlayable(v))
+                    output.add(secureLampac(v))
+                else if (v.startsWith("/lite/")) output.add(baseUrl + v)
+            }
+        }
+    }
 
     private fun collectStreams(value: Any?, fallback: String, output: MutableList<LampacStream>, depth: Int) {
         if (depth > 14) return
