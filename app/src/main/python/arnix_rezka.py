@@ -1,51 +1,166 @@
 import json
+import re
+from urllib.parse import urljoin, urlparse
+import requests
+from bs4 import BeautifulSoup
 from HdRezkaApi import HdRezkaApi
 from HdRezkaApi.search import HdRezkaSearch
 
-# This parser runs inside the Android app. It does not expose a network server.
 DEFAULT_ORIGIN = "https://hdrezka.ag"
+CATEGORY_PATHS = {
+    "Фильмы": "/films/",
+    "Сериалы": "/series/",
+    "Мультфильмы": "/cartoons/",
+    "Аниме": "/animation/",
+}
 
+def _safe_url(value):
+    url = urljoin(DEFAULT_ORIGIN, str(value or ""))
+    host = (urlparse(url).hostname or "").lower()
+    return url if url.startswith("https://") and (host == "hdrezka.ag" or host.endswith(".hdrezka.ag")) else ""
+
+def _rating(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+def _item(title, url, image="", rating=0, description="", category="", year=""):
+    return {
+        "title": str(title or "").strip(),
+        "url": _safe_url(url),
+        "image": _safe_url(image),
+        "rating": _rating(rating),
+        "description": str(description or "").strip(),
+        "category": str(category or ""),
+        "year": str(year or "")
+    }
+
+def _parse_cards(html, category):
+    soup = BeautifulSoup(html, "html.parser")
+    found = []
+    selectors = [
+        ".b-content__inline_item",
+        ".b-content__inline_item-cover",
+        ".b-content__inline_item-link",
+        ".b-content__inline_item"
+    ]
+    cards = soup.select(".b-content__inline_item")
+    if not cards:
+        cards = soup.select("div[id^='post'], .b-content__inline_item-cover")
+    for card in cards:
+        link = card.select_one("a[href]")
+        if not link:
+            continue
+        title = link.get("title") or link.get_text(" ", strip=True)
+        url = _safe_url(link.get("href"))
+        image_node = card.select_one("img")
+        image = image_node.get("src") or image_node.get("data-src") if image_node else ""
+        desc_node = card.select_one(".b-content__inline_item-text, .b-content__inline_item-desc")
+        rating_node = card.select_one(".b-rating, .rating")
+        year_node = card.select_one(".b-content__inline_item-info, .info")
+        item = _item(title, url, image, rating_node.get_text(" ", strip=True) if rating_node else 0,
+                     desc_node.get_text(" ", strip=True) if desc_node else "",
+                     category, year_node.get_text(" ", strip=True) if year_node else "")
+        if item["url"]:
+            found.append(item)
+    return found
+
+def catalog_json(category="Фильмы", page=1):
+    category = category if category in CATEGORY_PATHS else "Фильмы"
+    page = max(1, min(int(page), 100))
+    url = urljoin(DEFAULT_ORIGIN, CATEGORY_PATHS[category])
+    if page > 1:
+        url = urljoin(url, "page/" + str(page) + "/")
+    response = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"})
+    response.raise_for_status()
+    items = _parse_cards(response.text, category)
+    return json.dumps({"results": items[:60], "category": category, "page": page}, ensure_ascii=False)
 
 def search_json(query):
-    items = HdRezkaSearch(DEFAULT_ORIGIN)(query)
+    query = str(query or "").strip()
+    if len(query) < 2:
+        return json.dumps({"results": []}, ensure_ascii=False)
+    raw = HdRezkaSearch(DEFAULT_ORIGIN)(query, find_all=True)
+    items = getattr(raw, "all", None)
+    if items is None:
+        items = raw if isinstance(raw, list) else []
     results = []
-    for item in items[:30]:
-        url = str(item.get("url", ""))
-        if url.startswith("https://") and "hdrezka." in url:
-            results.append({
-                "title": str(item.get("title", "")),
-                "url": url,
-                "rating": item.get("rating")
-            })
+    seen = set()
+    for item in items[:60]:
+        url = _safe_url(item.get("url", ""))
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        category = str(item.get("category", ""))
+        results.append(_item(item.get("title"), url, item.get("image", ""),
+                             item.get("rating", 0), item.get("description", ""), category))
     return json.dumps({"results": results}, ensure_ascii=False)
 
-
-def stream_json(url, translation=None):
-    if not url.startswith("https://") or "hdrezka." not in url:
-        raise ValueError("Unsupported HDRezka address")
+def details_json(url):
+    url = _safe_url(url)
+    if not url:
+        raise ValueError("Недопустимая ссылка HDRezka")
     film = HdRezkaApi(url)
     if not film.ok:
-        raise RuntimeError(str(film.exception or "Cannot open title"))
-    translators = film.translators or {}
-    source = film.getStream(translation=translation)
+        raise RuntimeError(str(film.exception or "Не удалось открыть страницу"))
+    seasons = []
+    for season in (getattr(film, "episodesInfo", None) or []):
+        seasons.append({
+            "season": int(season.get("season", 0)),
+            "title": str(season.get("season_text", "")),
+            "episodes": [{
+                "episode": int(ep.get("episode", 0)),
+                "title": str(ep.get("episode_text", "")),
+                "translations": [{
+                    "id": str(t.get("translator_id", "")),
+                    "name": str(t.get("translator_name", ""))
+                } for t in (ep.get("translations", []) or [])]
+            } for ep in season.get("episodes", [])]
+        })
+    rating = getattr(film, "rating", None)
+    return json.dumps({
+        "title": str(getattr(film, "name", "")),
+        "description": str(getattr(film, "description", "")),
+        "poster": _safe_url(getattr(film, "thumbnailHQ", "") or getattr(film, "thumbnail", "")),
+        "rating": _rating(getattr(rating, "value", 0)),
+        "votes": int(getattr(rating, "votes", 0) or 0),
+        "category": str(getattr(film, "category", "")),
+        "type": str(getattr(film, "type", "")),
+        "seasons": seasons
+    }, ensure_ascii=False)
+
+def stream_json(url, translation=None, season=None, episode=None):
+    url = _safe_url(url)
+    if not url:
+        raise ValueError("Недопустимая ссылка HDRezka")
+    film = HdRezkaApi(url)
+    if not film.ok:
+        raise RuntimeError(str(film.exception or "Не удалось открыть страницу"))
+    translators = getattr(film, "translators", {}) or {}
+    if season is not None and episode is not None:
+        source = film.getStream(str(season), str(episode), translation=translation)
+    else:
+        source = film.getStream(translation=translation)
     videos = getattr(source, "videos", {}) or {}
     subtitle_data = getattr(getattr(source, "subtitles", None), "subtitles", {}) or {}
     subtitles = []
-    for code, value in subtitle_data.items():
+    for code, value in (subtitle_data.items() if hasattr(subtitle_data, "items") else []):
         if isinstance(value, dict):
-            subtitles.append({
-                "language": str(value.get("title", code)),
-                "url": str(value.get("link", ""))
-            })
+            subtitles.append({"language": str(value.get("title", code)), "url": str(value.get("link", ""))})
+    normalized_translators = []
+    for key, value in translators.items():
+        name = value.get("name", key) if isinstance(value, dict) else str(value)
+        normalized_translators.append({"id": str(key), "name": str(name)})
+    qualities = {}
+    if hasattr(videos, "items"):
+        for quality, links in videos.items():
+            if isinstance(links, str):
+                links = [links]
+            qualities[str(quality)] = [str(link) for link in links if str(link).startswith("http")]
     return json.dumps({
         "title": str(getattr(film, "name", "")),
-        "translators": [
-            {"id": str(key), "name": str(value.get("name", key))}
-            for key, value in translators.items()
-        ],
-        "qualities": {
-            str(quality): [str(link) for link in links if str(link).startswith("https://")]
-            for quality, links in videos.items()
-        },
+        "translators": normalized_translators,
+        "qualities": qualities,
         "subtitles": subtitles
     }, ensure_ascii=False)
