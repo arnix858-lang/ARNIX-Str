@@ -410,58 +410,159 @@ private fun CatalogScreen(
     onYear: (String) -> Unit = {},
     title: String = "Каталог"
 ) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isTvLayout = configuration.screenWidthDp >= 600
     val typeFilters = listOf("Все", "Фильмы", "Сериалы")
-    val genreOptions = listOf(TmdbGenre(0, "Все жанры")) + genres
-    val years = listOf("Любой", "2026", "2025", "2024", "2023", "2022", "2021", "2020")
-    val filteredItems = items.filter { item ->
-        val typeMatches = when (filter) {
-            "Фильмы" -> item.media_type == "movie"
-            "Сериалы" -> item.media_type == "tv"
-            else -> true
-        }
-        val genreMatches = genreId == 0 || genreId in item.genre_ids
-        val yearMatches = year == "Любой" || item.year == year
-        typeMatches && genreMatches && yearMatches
-    }
+    val selectedGenreName = genres.firstOrNull { it.id == genreId }?.name ?: "Все жанры"
+    val years = listOf("Любой") + (2026 downTo 1950).map { it.toString() }
+    var genreMenu by remember { mutableStateOf(false) }
+    var yearMenu by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        Text(title, color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 22.dp, bottom = 12.dp))
-        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(
+                start = if (isTvLayout) 30.dp else 18.dp,
+                end = if (isTvLayout) 30.dp else 18.dp,
+                top = if (isTvLayout) 26.dp else 18.dp,
+                bottom = 10.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, color = TextPrimary, fontSize = if (isTvLayout) 30.sp else 25.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (title == "Каталог") {
+                Text("TMDB", color = TextSecondary, fontSize = if (isTvLayout) 14.sp else 11.sp)
+            }
+        }
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = if (isTvLayout) 26.dp else 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isTvLayout) 12.dp else 8.dp)
+        ) {
             items(typeFilters) { option ->
-                FilterChip(selected = filter == option, onClick = { onFilter(option) }, label = { Text(option) },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
+                FilterChip(
+                    selected = filter == option,
+                    onClick = { onFilter(option) },
+                    label = { Text(option, fontSize = if (isTvLayout) 16.sp else 13.sp) },
+                    modifier = Modifier.heightIn(min = if (isTvLayout) 48.dp else 40.dp).focusable(),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Accent.copy(alpha = 0.14f),
+                        selectedLabelColor = Accent
+                    )
+                )
             }
         }
-        Text("Жанры", color = TextPrimary, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 18.dp, top = 12.dp, bottom = 4.dp))
-        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(genreOptions) { entry ->
-                FilterChip(selected = genreId == entry.id, onClick = { onGenre(entry.id) },
-                    label = { Text(entry.name) },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(
+                horizontal = if (isTvLayout) 26.dp else 16.dp,
+                vertical = if (isTvLayout) 14.dp else 8.dp
+            ),
+            horizontalArrangement = Arrangement.spacedBy(if (isTvLayout) 14.dp else 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.weight(1.35f)) {
+                OutlinedButton(
+                    onClick = { genreMenu = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = if (isTvLayout) 54.dp else 46.dp).focusable(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text("Жанр: $selectedGenreName", maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        fontSize = if (isTvLayout) 15.sp else 12.sp, modifier = Modifier.weight(1f))
+                    Text("▾", fontSize = 17.sp)
+                }
+                DropdownMenu(
+                    expanded = genreMenu,
+                    onDismissRequest = { genreMenu = false },
+                    modifier = Modifier.heightIn(max = if (isTvLayout) 480.dp else 360.dp).background(Color.White)
+                ) {
+                    DropdownMenuItem(text = { Text("Все жанры") }, onClick = { onGenre(0); genreMenu = false })
+                    genres.forEach { genre ->
+                        DropdownMenuItem(
+                            text = { Text(genre.name) },
+                            onClick = { onGenre(genre.id); genreMenu = false }
+                        )
+                    }
+                }
+            }
+            Box(Modifier.weight(0.85f)) {
+                OutlinedButton(
+                    onClick = { yearMenu = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = if (isTvLayout) 54.dp else 46.dp).focusable(),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Text(if (year == "Любой") "Год: любой" else "Год: $year",
+                        maxLines = 1, fontSize = if (isTvLayout) 15.sp else 12.sp)
+                    Text("▾", fontSize = 17.sp)
+                }
+                DropdownMenu(
+                    expanded = yearMenu,
+                    onDismissRequest = { yearMenu = false },
+                    modifier = Modifier.heightIn(max = if (isTvLayout) 480.dp else 360.dp).background(Color.White)
+                ) {
+                    years.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(if (option == "Любой") "Любой год" else option) },
+                            onClick = { onYear(option); yearMenu = false }
+                        )
+                    }
+                }
             }
         }
-        Text("Год выпуска", color = TextPrimary, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 18.dp, top = 8.dp, bottom = 4.dp))
-        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(years) { option ->
-                FilterChip(selected = year == option, onClick = { onYear(option) }, label = { Text(option) },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.14f), selectedLabelColor = Accent))
+
+        Row(
+            Modifier.fillMaxWidth().padding(
+                start = if (isTvLayout) 30.dp else 18.dp,
+                end = if (isTvLayout) 30.dp else 18.dp,
+                top = 2.dp,
+                bottom = 8.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(if (loading) "Загружаем подборку…" else "Найдено: ${items.size}",
+                color = TextSecondary, fontSize = if (isTvLayout) 14.sp else 12.sp)
+            Spacer(Modifier.weight(1f))
+            if (genreId != 0 || year != "Любой" || filter != "Все") {
+                TextButton(onClick = {
+                    onFilter("Все")
+                    onGenre(0)
+                    onYear("Любой")
+                }) { Text("Сбросить", fontSize = if (isTvLayout) 14.sp else 12.sp) }
             }
         }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-        Text("${filteredItems.size} результатов", color = TextSecondary, fontSize = 12.sp,
-            modifier = Modifier.padding(start = 18.dp, top = 8.dp))
-        if (!loading && filteredItems.isEmpty()) {
-            Text("По выбранным фильтрам ничего не найдено", color = TextSecondary, modifier = Modifier.padding(20.dp))
+
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (!loading && items.isEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().weight(1f).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("Ничего не найдено", color = TextPrimary,
+                    fontSize = if (isTvLayout) 22.sp else 18.sp, fontWeight = FontWeight.SemiBold)
+                Text("Измените жанр, год или тип контента", color = TextSecondary,
+                    fontSize = if (isTvLayout) 16.sp else 13.sp,
+                    modifier = Modifier.padding(top = 8.dp))
+            }
+        } else {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(
+                    if (isTvLayout) 190.dp else 142.dp
+                ),
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(
+                    start = if (isTvLayout) 28.dp else 14.dp,
+                    end = if (isTvLayout) 28.dp else 14.dp,
+                    top = 10.dp,
+                    bottom = 28.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(if (isTvLayout) 20.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(if (isTvLayout) 22.dp else 16.dp)
+            ) {
+                items(items) { PosterCard(it, onSelect, if (isTvLayout) 190.dp else 136.dp) }
+            }
         }
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-            columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(142.dp),
-            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) { items(filteredItems) { PosterCard(it, onSelect) } }
     }
 }
 
