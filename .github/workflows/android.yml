@@ -31,7 +31,6 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/arnix-release.jks"
       - name: Build signed release APK
         env:
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/arnix-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
