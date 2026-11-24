@@ -7,14 +7,30 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-data class RezkaSearchResponse(val results: List<RezkaSearchItem> = emptyList())
-data class RezkaSearchItem(
+data class RezkaPage(val results: List<RezkaTitle> = emptyList(), val page: Int = 1, val category: String = "")
+data class RezkaTitle(
     val title: String = "",
     val url: String = "",
-    val rating: Double? = null
+    val image: String = "",
+    val rating: Double = 0.0,
+    val description: String = "",
+    val category: String = "",
+    val year: String = ""
 )
 data class RezkaTranslator(val id: String = "", val name: String = "")
 data class RezkaSubtitle(val language: String = "", val url: String = "")
+data class RezkaEpisode(val episode: Int = 0, val title: String = "", val translations: List<RezkaTranslator> = emptyList())
+data class RezkaSeason(val season: Int = 0, val title: String = "", val episodes: List<RezkaEpisode> = emptyList())
+data class RezkaDetails(
+    val title: String = "",
+    val description: String = "",
+    val poster: String = "",
+    val rating: Double = 0.0,
+    val votes: Int = 0,
+    val category: String = "",
+    val type: String = "",
+    val seasons: List<RezkaSeason> = emptyList()
+)
 data class RezkaStreamResponse(
     val title: String = "",
     val translators: List<RezkaTranslator> = emptyList(),
@@ -22,33 +38,39 @@ data class RezkaStreamResponse(
     val subtitles: List<RezkaSubtitle> = emptyList()
 )
 
-/**
- * Runs the upstream HdRezkaApi Python parser inside this app's embedded
- * Python runtime. No external ARNIX API server or user-installed runtime
- * is required. Network access to the source website is still required.
- */
 class HdRezkaService private constructor(context: Context) {
     private val gson = Gson()
     private val appContext = context.applicationContext
 
-    private fun pythonModule() : com.chaquo.python.PyObject {
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(appContext))
-        }
+    private fun module(): com.chaquo.python.PyObject {
+        if (!Python.isStarted()) Python.start(AndroidPlatform(appContext))
         return Python.getInstance().getModule("arnix_rezka")
     }
 
-    suspend fun search(query: String): RezkaSearchResponse = withContext(Dispatchers.IO) {
-        require(query.trim().length >= 2) { "Введите минимум 2 символа" }
-        val json = pythonModule().callAttr("search_json", query.trim()).toString()
-        gson.fromJson(json, RezkaSearchResponse::class.java)
+    private suspend fun call(name: String, vararg args: Any?): String = withContext(Dispatchers.IO) {
+        module().callAttr(name, *args).toString()
     }
 
-    suspend fun stream(url: String, translation: String? = null): RezkaStreamResponse =
-        withContext(Dispatchers.IO) {
-            val json = pythonModule().callAttr("stream_json", url, translation).toString()
-            gson.fromJson(json, RezkaStreamResponse::class.java)
-        }
+    suspend fun catalog(category: String, page: Int = 1): RezkaPage =
+        gson.fromJson(call("catalog_json", category, page), RezkaPage::class.java)
+
+    suspend fun search(query: String): RezkaPage {
+        require(query.trim().length >= 2) { "Введите минимум 2 символа" }
+        return gson.fromJson(call("search_json", query.trim()), RezkaPage::class.java)
+    }
+
+    suspend fun details(url: String): RezkaDetails =
+        gson.fromJson(call("details_json", url), RezkaDetails::class.java)
+
+    suspend fun stream(
+        url: String,
+        translation: String? = null,
+        season: Int? = null,
+        episode: Int? = null
+    ): RezkaStreamResponse = gson.fromJson(
+        call("stream_json", url, translation, season, episode),
+        RezkaStreamResponse::class.java
+    )
 
     companion object {
         fun create(context: Context): HdRezkaService = HdRezkaService(context)
