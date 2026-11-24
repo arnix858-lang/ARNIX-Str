@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArnixCinemaApp() {
     val context = LocalContext.current
-    val catalogApi = remember { HdRezkaCatalogService.create(context) }
+    val catalogApi = remember { HdRezkaService.create(context) }
     
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Главная") }
@@ -313,7 +313,7 @@ fun ArnixCinemaApp() {
                                     val e = if (details?.seasons?.isNotEmpty() == true) selectedEpisode else null
                                     streamLoading = true
                                     scope.launch {
-                                        try { stream = videoApi.stream(selected!!.url, translator.id, s, e) }
+                                        try { stream = catalogApi.stream(selected!!.url, translator.id, s, e) }
                                         catch (ex: Exception) { streamError = ex.message ?: "Ошибка выбора озвучки" }
                                         finally { streamLoading = false }
                                     }
