@@ -45,12 +45,11 @@ jobs:
 
       - name: Prepare update APK filename
         run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/ARNIX-Cinema.apk
-      - name: Generate notes for this build only
+      - name: Generate Russian release notes
         run: |
-          git log -1 --pretty=format:'%s%n%n%b' > CURRENT_RELEASE_NOTES.md
-          if [ ! -s CURRENT_RELEASE_NOTES.md ]; then
-            echo "Исправления и улучшения текущей сборки." > CURRENT_RELEASE_NOTES.md
-          fi
+          cat > CURRENT_RELEASE_NOTES.md <<'NOTES'
+          Исправления и улучшения текущей версии ARNIX Cinema.
+          NOTES
       - name: Publish APK as GitHub Release
         uses: softprops/action-gh-release@v2
         with:
