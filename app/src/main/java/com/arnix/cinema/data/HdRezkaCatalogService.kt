@@ -9,10 +9,10 @@ import java.net.URLEncoder
 import java.net.URL
 
 /**
- * Catalog, metadata and public media URLs are fetched through the LordFilm bridge.
- * ExoPlayer UI and playback controls remain unchanged.
+ * Catalog and metadata are fetched through the server-side ndenissov/HDRezka client.
+ * Playback remains in HdRezkaService and is intentionally untouched.
  */
-class LordFilmCatalogService private constructor() {
+class HdRezkaCatalogService private constructor() {
     private val gson = Gson()
     private val baseUrl = "https://arnix-cinema-hdrezka-api.onrender.com"
 
@@ -54,18 +54,23 @@ class LordFilmCatalogService private constructor() {
         return gson.fromJson(get("/details?url=$encoded"), RezkaDetails::class.java)
     }
 
-    suspend fun stream(url: String, translation: String? = null, season: Int? = null, episode: Int? = null): RezkaStreamResponse {
+    suspend fun stream(
+        url: String,
+        translation: String? = null,
+        season: Int? = null,
+        episode: Int? = null
+    ): RezkaStreamResponse {
         val encodedUrl = URLEncoder.encode(url, "UTF-8")
-        val encodedTranslation = translation?.let { "&translation=" + URLEncoder.encode(it, "UTF-8") } ?: ""
+        val translationParam = translation?.let { "&translation=" + URLEncoder.encode(it, "UTF-8") } ?: ""
         val seasonParam = season?.let { "&season=$it" } ?: ""
         val episodeParam = episode?.let { "&episode=$it" } ?: ""
         return gson.fromJson(
-            get("/stream?url=$encodedUrl$encodedTranslation$seasonParam$episodeParam"),
+            get("/stream?url=$encodedUrl$translationParam$seasonParam$episodeParam"),
             RezkaStreamResponse::class.java
         )
     }
 
     companion object {
-        fun create(context: Context): LordFilmCatalogService = LordFilmCatalogService()
+        fun create(context: Context): HdRezkaCatalogService = HdRezkaCatalogService()
     }
 }
