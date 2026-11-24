@@ -1,4 +1,5 @@
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
-requests==2.32.3
-beautifulsoup4==4.13.3
+HdRezkaApi==11.2.3
+hdrezka==5.2.0
+git+https://github.com/kristal374/hdrezka-api.git
