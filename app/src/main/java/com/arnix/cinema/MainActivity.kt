@@ -1,6 +1,8 @@
 package com.arnix.cinema
 
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -175,7 +177,7 @@ fun ArnixCinemaApp() {
         "Избранное" to Icons.Default.Favorite
     )
 
-    MaterialTheme(colorScheme = lightColorScheme(
+    MaterialTheme(colorScheme = darkColorScheme(
         background = Bg, surface = SurfaceDark, primary = Accent,
         onBackground = TextPrimary, onSurface = TextPrimary,
         surfaceVariant = Color(0xFF202B38), onSurfaceVariant = TextSecondary,
@@ -753,6 +755,7 @@ private fun DetailScreen(
     val rating = info?.voteAverage?.takeIf { it > 0 } ?: item.voteAverage
     val year = info?.year?.ifBlank { item.year } ?: item.year
     val scroll = rememberScrollState()
+    val context = LocalContext.current
 
     Column(Modifier.fillMaxSize().background(Bg)) {
         Box(Modifier.fillMaxWidth().heightIn(min = 250.dp, max = 390.dp)) {
@@ -838,7 +841,7 @@ private fun DetailScreen(
                 }
                 if (!trailerKey.isNullOrBlank()) {
                     OutlinedButton(
-                        onClick = { /* Trailer link is displayed below for TV compatibility. */ },
+                        onClick = { trailerKey?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$it"))) } },
                         shape = RoundedCornerShape(13.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = .7f))
                     ) { Text("Трейлер найден", color = Accent) }
