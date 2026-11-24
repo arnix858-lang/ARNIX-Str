@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.chaquo.python")
 }
 
 android {
@@ -10,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.arnix.cinema"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 35
         // CI increments this value for every build, allowing Android to install updates.
         versionCode = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toInt() ?: 1
@@ -30,6 +31,15 @@ android {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
+        }
+    }
+
+    defaultConfig {
+        python {
+            version = "3.11"
+            pip {
+                install("HdRezkaApi==11.2.3")
+            }
         }
     }
 
