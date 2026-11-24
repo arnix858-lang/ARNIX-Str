@@ -81,6 +81,7 @@ fun ArnixCinemaApp() {
     var catalogGenre by remember { mutableStateOf(0) }
     var catalogYear by remember { mutableStateOf("Любой") }
     var catalogGenres by remember { mutableStateOf<List<TmdbGenre>>(emptyList()) }
+    var catalogGenresError by remember { mutableStateOf<String?>(null) }
     var catalogItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var catalogLoading by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
@@ -109,10 +110,13 @@ fun ArnixCinemaApp() {
     LaunchedEffect(Unit) {
         loadHome()
         if (TmdbKey.value.isNotBlank()) {
-            runCatching {
+            try {
                 val movieGenres = api.movieGenres(TmdbKey.value).genres
                 val tvGenres = api.tvGenres(TmdbKey.value).genres
                 catalogGenres = (movieGenres + tvGenres).distinctBy { it.id }.sortedBy { it.name }
+                catalogGenresError = if (catalogGenres.isEmpty()) "TMDB не вернул список жанров." else null
+            } catch (_: Exception) {
+                catalogGenresError = "Не удалось загрузить жанры. Проверьте интернет и TMDB API-ключ."
             }
         }
         updateInfo = withContext(Dispatchers.IO) {
@@ -300,6 +304,7 @@ fun ArnixCinemaApp() {
                             items = catalogItems,
                             loading = catalogLoading,
                             genres = catalogGenres,
+                            genresError = catalogGenresError,
                             filter = catalogFilter,
                             genreId = catalogGenre,
                             year = catalogYear,
@@ -409,6 +414,7 @@ private fun CatalogScreen(
     onFilter: (String) -> Unit,
     onSelect: (MediaItem) -> Unit,
     genres: List<TmdbGenre> = emptyList(),
+    genresError: String? = null,
     genreId: Int = 0,
     year: String = "Любой",
     onGenre: (Int) -> Unit = {},
@@ -480,15 +486,28 @@ private fun CatalogScreen(
                 DropdownMenu(
                     expanded = genreMenu,
                     onDismissRequest = { genreMenu = false },
-                    modifier = Modifier.heightIn(max = if (isTvLayout) 480.dp else 360.dp).background(Color.White)
+                    modifier = Modifier.heightIn(max = if (isTvLayout) 480.dp else 360.dp)
+                        .background(SurfaceDark),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    DropdownMenuItem(text = { Text("Все жанры") }, onClick = { onGenre(0); genreMenu = false })
+                    DropdownMenuItem(
+                        text = { Text("Все жанры", color = TextPrimary) },
+                        onClick = { onGenre(0); genreMenu = false }
+                    )
                     genres.forEach { genre ->
                         DropdownMenuItem(
-                            text = { Text(genre.name) },
+                            text = { Text(genre.name, color = TextPrimary) },
                             onClick = { onGenre(genre.id); genreMenu = false }
                         )
                     }
+                }
+                if (genresError != null || genres.isEmpty()) {
+                    Text(
+                        genresError ?: "Список жанров пока пуст.",
+                        color = if (genresError != null) Color(0xFFFF8A80) else TextSecondary,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(start = 4.dp, top = 3.dp)
+                    )
                 }
             }
             Box(Modifier.weight(0.85f)) {
@@ -644,8 +663,9 @@ private fun PosterCard(
             if (item.voteAverage > 0) {
                 Surface(
                     modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-                    color = Color(0xEFFFFFFF),
+                    color = Color(0xE61A2633),
                     shape = RoundedCornerShape(7.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .24f)),
                     shadowElevation = 2.dp
                 ) {
                     Row(
@@ -655,7 +675,7 @@ private fun PosterCard(
                         Text("★", color = Color(0xFFE5A000), fontSize = 11.sp)
                         Text(
                             " ${"%.1f".format(item.voteAverage)}",
-                            color = TextPrimary,
+                            color = Color.White,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold
                         )
