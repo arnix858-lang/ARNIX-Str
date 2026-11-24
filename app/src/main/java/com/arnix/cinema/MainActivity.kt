@@ -2,8 +2,8 @@ package com.arnix.cinema
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,11 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.media3.common.MediaItem as PlayerMediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.arnix.cinema.data.*
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.common.MediaItem as PlayerMediaItem
-import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -60,99 +60,134 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArnixCinemaApp() {
     val context = LocalContext.current
-    val catalogApi = remember { HdRezkaService.create(context) }
-    
+    val tmdb = remember { TmdbService() }
+    val lampac = remember { LampacService() }
     val scope = rememberCoroutineScope()
+
     var tab by remember { mutableStateOf("Главная") }
     var category by remember { mutableStateOf("Фильмы") }
-    var homeLists by remember { mutableStateOf<Map<String, List<RezkaTitle>>>(emptyMap()) }
-    var catalog by remember { mutableStateOf<List<RezkaTitle>>(emptyList()) }
-    var results by remember { mutableStateOf<List<RezkaTitle>>(emptyList()) }
+    var home by remember { mutableStateOf<Map<String, List<MediaTitle>>>(emptyMap()) }
+    var catalog by remember { mutableStateOf<List<MediaTitle>>(emptyList()) }
+    var results by remember { mutableStateOf<List<MediaTitle>>(emptyList()) }
     var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf<RezkaTitle?>(null) }
-    var details by remember { mutableStateOf<RezkaDetails?>(null) }
-    var favorites = remember { mutableStateListOf<RezkaTitle>() }
+    var selected by remember { mutableStateOf<MediaTitle?>(null) }
+    var details by remember { mutableStateOf<MediaDetails?>(null) }
+    val favorites = remember { mutableStateListOf<MediaTitle>() }
     var loading by remember { mutableStateOf(false) }
     var searchLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var page by remember { mutableIntStateOf(1) }
-    var selectedSeason by remember { mutableIntStateOf(1) }
-    var selectedEpisode by remember { mutableIntStateOf(1) }
-    var stream by remember { mutableStateOf<RezkaStreamResponse?>(null) }
-    var selectedTranslator by remember { mutableStateOf<String?>(null) }
+    var season by remember { mutableIntStateOf(1) }
+    var episode by remember { mutableIntStateOf(1) }
+    var providers by remember { mutableStateOf<List<LampacProvider>>(emptyList()) }
+    var streams by remember { mutableStateOf<List<LampacStream>>(emptyList()) }
+    var selectedProvider by remember { mutableStateOf<LampacProvider?>(null) }
+    var selectedStream by remember { mutableStateOf<LampacStream?>(null) }
+    var providerLoading by remember { mutableStateOf(false) }
     var streamLoading by remember { mutableStateOf(false) }
-    var streamError by remember { mutableStateOf<String?>(null) }
-    var playerUrl by remember { mutableStateOf<String?>(null) }
+    var videoError by remember { mutableStateOf<String?>(null) }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
     var updateDownloading by remember { mutableStateOf(false) }
     var updateError by remember { mutableStateOf<String?>(null) }
 
-    fun loadCategory(cat: String, nextPage: Int = 1) {
+    fun loadCatalog(cat: String, nextPage: Int = 1) {
         scope.launch {
             loading = true
             error = null
             try {
-                val response = catalogApi.catalog(cat, nextPage)
-                catalog = if (nextPage == 1) response.results else catalog + response.results
+                val data = tmdb.catalog(cat, nextPage)
+                catalog = if (nextPage == 1) data else catalog + data
                 page = nextPage
             } catch (e: Exception) {
-                error = "Не удалось загрузить раздел HDRezka: ${e.message ?: "источник недоступен"}"
+                error = "Не удалось загрузить каталог TMDB: ${e.message ?: "ошибка сети"}"
             } finally { loading = false }
         }
     }
 
-    fun openTitle(item: RezkaTitle) {
+    fun openTitle(item: MediaTitle) {
         selected = item
         details = null
-        stream = null
-        streamError = null
-        selectedSeason = 1
-        selectedEpisode = 1
+        providers = emptyList()
+        streams = emptyList()
+        selectedProvider = null
+        selectedStream = null
+        season = 1
+        episode = 1
+        error = null
         scope.launch {
             loading = true
-            try { details = catalogApi.details(item.url) }
-            catch (e: Exception) { error = "Не удалось загрузить карточку: ${e.message ?: "ошибка источника"}" }
+            try { details = tmdb.details(item) }
+            catch (e: Exception) { error = "Не удалось загрузить описание TMDB: ${e.message ?: "ошибка сети"}" }
             finally { loading = false }
         }
     }
 
+    fun findProviders(s: Int? = null, e: Int? = null) {
+        val item = selected ?: return
+        scope.launch {
+            providerLoading = true
+            videoError = null
+            providers = emptyList()
+            streams = emptyList()
+            selectedProvider = null
+            selectedStream = null
+            try {
+                val found = lampac.providers(item)
+                providers = found
+                if (found.isEmpty()) videoError = "Lampac проверил источники, но доступных вариантов не нашёл."
+            } catch (ex: Exception) {
+                videoError = "Ошибка Lampac: ${ex.message ?: "не удалось получить источники"}"
+            } finally { providerLoading = false }
+        }
+    }
+
+    fun loadProvider(provider: LampacProvider) {
+        val item = selected ?: return
+        selectedProvider = provider
+        streamLoading = true
+        streams = emptyList()
+        videoError = null
+        scope.launch {
+            try {
+                val found = lampac.streams(item, provider,
+                    if (item.serial == 1) season else null,
+                    if (item.serial == 1) episode else null)
+                streams = found
+                if (found.isEmpty()) videoError = "${provider.name}: сервер не вернул прямые ссылки. Попробуйте другой источник."
+            } catch (ex: Exception) {
+                videoError = "${provider.name}: ${ex.message ?: "ошибка получения потоков"}"
+            } finally { streamLoading = false }
+        }
+    }
+
     LaunchedEffect(Unit) {
-        // Check immediately, then repeat while the app remains open. A failed
-        // GitHub request is logged and retried on the next cycle, not swallowed forever.
         launch {
             while (true) {
-                runCatching {
-                    withContext(Dispatchers.IO) { AppUpdater.checkForUpdate(context) }
-                }.onSuccess { update ->
-                    if (update != null) availableUpdate = update
-                }.onFailure { cause ->
-                    android.util.Log.w("ARNIX-Updater", "Update check failed", cause)
-                }
+                runCatching { withContext(Dispatchers.IO) { AppUpdater.checkForUpdate(context) } }
+                    .onSuccess { if (it != null) availableUpdate = it }
+                    .onFailure { android.util.Log.w("ARNIX-Updater", "Update check failed", it) }
                 delay(2 * 60 * 60 * 1000L)
             }
         }
-        Categories.forEach { cat ->
-            runCatching { homeLists = homeLists + (cat to catalogApi.catalog(cat, 1).results.take(18)) }
-        }
+        loading = true
+        try { home = tmdb.home() }
+        catch (e: Exception) { error = "TMDB: ${e.message ?: "не удалось загрузить главную"}" }
+        finally { loading = false }
     }
 
     LaunchedEffect(tab, query) {
         if (tab != "Поиск") return@LaunchedEffect
         val term = query.trim()
         if (term.length < 2) { results = emptyList(); return@LaunchedEffect }
-        delay(400)
+        delay(450)
         searchLoading = true
         error = null
-        try { results = catalogApi.search(term).results }
-        catch (e: Exception) {
-            results = emptyList()
-            error = "Поиск HDRezka не выполнен: ${e.message ?: "источник недоступен"}"
-        } finally { searchLoading = false }
+        try { results = tmdb.search(term) }
+        catch (e: Exception) { results = emptyList(); error = "Поиск TMDB: ${e.message ?: "ошибка"}" }
+        finally { searchLoading = false }
     }
 
-    LaunchedEffect(tab, category) {
-        if (tab == "Каталог") loadCategory(category)
-    }
+    LaunchedEffect(tab, category) { if (tab == "Каталог") loadCatalog(category) }
 
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     MaterialTheme(colorScheme = darkColorScheme(
@@ -163,20 +198,13 @@ fun ArnixCinemaApp() {
         if (selected != null) {
             DetailScreen(
                 item = selected!!, details = details, loading = loading,
-                onBack = { selected = null; details = null; stream = null },
-                onFavorite = { if (favorites.none { it.url == selected!!.url }) favorites.add(selected!!) },
-                onPlay = { season, episode, translator ->
-                    streamLoading = true
-                    streamError = null
-                    scope.launch {
-                        try {
-                            stream = catalogApi.stream(selected!!.url, translator, season, episode)
-                            selectedTranslator = translator ?: stream?.translators?.firstOrNull()?.id
-                        } catch (e: Exception) {
-                            streamError = "Не удалось получить видеоссылки: ${e.message ?: "HDRezka не вернула потоки"}"
-                        } finally { streamLoading = false }
-                    }
-                }
+                season = season, episode = episode,
+                onSeason = { season = it; episode = 1 },
+                onEpisode = { episode = it },
+                onBack = { selected = null; details = null; providers = emptyList(); streams = emptyList() },
+                onFavorite = { if (favorites.none { it.id == selected!!.id && it.mediaType == selected!!.mediaType }) favorites.add(selected!!) },
+                onPlay = { findProviders() },
+                onPlayEpisode = { findProviders(season, episode) }
             )
         } else {
             Scaffold(
@@ -202,33 +230,29 @@ fun ArnixCinemaApp() {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         when (tab) {
                             "Поиск" -> Column(Modifier.fillMaxSize().padding(16.dp)) {
-                                Text("Поиск HDRezka", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                Text("Поиск фильмов и сериалов", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                                 OutlinedTextField(value = query, onValueChange = { query = it },
                                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                                    placeholder = { Text("Название фильма или сериала") }, singleLine = true)
+                                    placeholder = { Text("Название фильма, сериала или аниме") }, singleLine = true)
                                 if (searchLoading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
                                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                                TitleGrid(results, ::openTitle)
+                                MediaGrid(results, ::openTitle)
                             }
                             "Каталог" -> Column(Modifier.fillMaxSize().padding(16.dp)) {
-                                Text("Каталог HDRezka", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(vertical = 12.dp)) {
+                                Text("Каталог", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 12.dp)) {
                                     items(Categories) { cat ->
-                                        FilterChip(selected = category == cat, onClick = { category = cat },
-                                            label = { Text(cat) })
+                                        FilterChip(selected = category == cat, onClick = { category = cat }, label = { Text(cat) })
                                     }
                                 }
                                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                                TitleGrid(catalog, ::openTitle)
-                                TextButton(onClick = { loadCategory(category, page + 1) }, enabled = !loading) {
-                                    Text("Загрузить ещё")
-                                }
+                                MediaGrid(catalog, ::openTitle)
+                                TextButton(onClick = { loadCatalog(category, page + 1) }, enabled = !loading) { Text("Загрузить ещё") }
                             }
                             "Избранное" -> Column(Modifier.fillMaxSize().padding(16.dp)) {
                                 Text("Избранное", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                                TitleGrid(favorites, ::openTitle)
+                                MediaGrid(favorites, ::openTitle)
                             }
                             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                                 item {
@@ -237,21 +261,19 @@ fun ArnixCinemaApp() {
                                         contentAlignment = Alignment.BottomStart) {
                                         Column(Modifier.padding(20.dp)) {
                                             Text("ARNIX CINEMA", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            Text("Фильмы и сериалы HDRezka", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
-                                            Text("Каталог загружается непосредственно из источника", color = TextSecondary)
+                                            Text("Фильмы и сериалы", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black)
+                                            Text("Каталог TMDB · Видео и источники Lampac", color = TextSecondary)
                                         }
                                     }
                                 }
-                                Categories.forEach { cat ->
-                                    val list = homeLists[cat].orEmpty()
-                                    item { Text(cat, color = TextPrimary, fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 18.dp)) }
-                                    if (list.isEmpty()) item { Text("Раздел пока не загрузился", color = TextSecondary,
-                                        modifier = Modifier.padding(16.dp)) }
+                                if (loading && home.isEmpty()) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                                error?.let { msg -> item { Text(msg, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) } }
+                                home.forEach { (name, list) ->
+                                    item { Text(name, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(start = 16.dp, top = 18.dp, bottom = 8.dp)) }
                                     item {
-                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            items(list) { title -> TitleCard(title, Modifier.width(138.dp)) { openTitle(title) } }
+                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            items(list) { title -> MediaCard(title, Modifier.width(138.dp)) { openTitle(title) } }
                                         }
                                     }
                                 }
@@ -262,93 +284,65 @@ fun ArnixCinemaApp() {
             }
         }
 
+        // Lampac provider and stream picker.
+        if (providerLoading || streamLoading) AlertDialog(
+            onDismissRequest = {}, title = { Text(if (providerLoading) "Поиск источников Lampac" else "Получение потока") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(if (providerLoading) "Проверяем доступные кинотеатры и видеопровайдеры…" else "Запрашиваем ссылку у выбранного провайдера…")
+            } }, confirmButton = {}
+        )
 
-        availableUpdate?.let { update ->
-            AlertDialog(
-                onDismissRequest = { if (!updateDownloading) availableUpdate = null },
-                title = { Text("Доступно обновление ARNIX Cinema") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Новая версия: ${update.versionName}")
-                        if (update.releaseNotes.isNotBlank()) Text(update.releaseNotes)
-                        if (updateDownloading) {
-                            LinearProgressIndicator(Modifier.fillMaxWidth())
-                            Text("Загружаем APK… Не закрывайте приложение.")
+        if (providers.isNotEmpty() && selectedProvider == null) AlertDialog(
+            onDismissRequest = { providers = emptyList() },
+            title = { Text("Источники Lampac") },
+            text = {
+                Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Доступные источники: ${providers.size}", color = TextSecondary)
+                    providers.forEach { p ->
+                        OutlinedButton(onClick = { loadProvider(p) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(p.name + if (p.available) " · доступен" else " · не проверен")
                         }
-                        updateError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    }
-                },
-                confirmButton = {
-                    TextButton(enabled = !updateDownloading, onClick = {
-                        updateDownloading = true
-                        updateError = null
-                        scope.launch {
-                            try {
-                                AppUpdater.downloadAndInstall(context, update)
-                            } catch (e: Exception) {
-                                updateError = e.message ?: "Не удалось установить обновление."
-                            } finally {
-                                updateDownloading = false
-                            }
-                        }
-                    }) { Text("Обновить") }
-                },
-                dismissButton = {
-                    TextButton(enabled = !updateDownloading, onClick = { availableUpdate = null }) {
-                        Text("Позже")
                     }
                 }
-            )
+            },
+            confirmButton = { TextButton(onClick = { providers = emptyList() }) { Text("Закрыть") } }
+        )
+
+        if (streams.isNotEmpty()) AlertDialog(
+            onDismissRequest = { streams = emptyList(); selectedProvider = null },
+            title = { Text(selectedProvider?.name ?: "Варианты видео") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    streams.forEachIndexed { index, stream ->
+                        Button(onClick = { selectedStream = stream; streams = emptyList(); providers = emptyList(); selectedProvider = null },
+                            modifier = Modifier.fillMaxWidth()) {
+                            Text(stream.title.ifBlank { "Вариант ${index + 1}" }, maxLines = 2)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { streams = emptyList(); selectedProvider = null }) { Text("Назад") } }
+        )
+
+        videoError?.let { msg ->
+            AlertDialog(onDismissRequest = { videoError = null },
+                title = { Text("Lampac") }, text = { Text(msg) },
+                confirmButton = { TextButton(onClick = { videoError = null; selectedProvider = null }) { Text("Закрыть") } })
         }
 
-        streamLoading.let { busy ->
-            if (busy) AlertDialog(onDismissRequest = {}, title = { Text("Получение видеоссылок") },
-                text = { Column { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Запрашиваем потоки HDRezka…") } },
-                confirmButton = {})
-        }
-        streamError?.let { msg ->
-            AlertDialog(onDismissRequest = { streamError = null }, title = { Text("HDRezka") },
-                text = { Text(msg) }, confirmButton = { TextButton(onClick = { streamError = null }) { Text("Закрыть") } })
-        }
-        stream?.let { data ->
-            AlertDialog(onDismissRequest = { stream = null }, title = { Text(data.title.ifBlank { "Выбор потока" }) },
-                text = {
-                    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("ОЗВУЧКА", color = Accent, fontWeight = FontWeight.Bold)
-                        data.translators.forEach { translator ->
-                            FilterChip(selected = selectedTranslator == translator.id,
-                                onClick = {
-                                    selectedTranslator = translator.id
-                                    val s = if (details?.seasons?.isNotEmpty() == true) selectedSeason else null
-                                    val e = if (details?.seasons?.isNotEmpty() == true) selectedEpisode else null
-                                    streamLoading = true
-                                    scope.launch {
-                                        try { stream = catalogApi.stream(selected!!.url, translator.id, s, e) }
-                                        catch (ex: Exception) { streamError = ex.message ?: "Ошибка выбора озвучки" }
-                                        finally { streamLoading = false }
-                                    }
-                                }, label = { Text(translator.name) })
-                        }
-                        Text("КАЧЕСТВО", color = Accent, fontWeight = FontWeight.Bold)
-                        data.qualities.forEach { (quality, links) ->
-                            links.forEach { link ->
-                                Button(onClick = { playerUrl = link; stream = null },
-                                    modifier = Modifier.fillMaxWidth()) { Text(quality) }
-                            }
-                        }
-                        if (data.qualities.isEmpty()) Text("Ссылки на потоки не найдены", color = TextSecondary)
-                    }
-                }, confirmButton = { TextButton(onClick = { stream = null }) { Text("Закрыть") } })
-        }
-        playerUrl?.let { url ->
-            val player = remember(url) {
+        selectedStream?.let { stream ->
+            val player = remember(stream.url) {
                 ExoPlayer.Builder(context).build().apply {
-                    setMediaItem(PlayerMediaItem.fromUri(url)); prepare(); playWhenReady = true
+                    setMediaItem(PlayerMediaItem.fromUri(stream.url))
+                    prepare()
+                    playWhenReady = true
                 }
             }
             DisposableEffect(player) { onDispose { player.release() } }
-            Dialog(onDismissRequest = { playerUrl = null }) {
+            Dialog(onDismissRequest = { selectedStream = null }) {
                 Surface(Modifier.fillMaxWidth().aspectRatio(16f / 9f), color = Color.Black,
                     shape = RoundedCornerShape(12.dp)) {
                     AndroidView(factory = { PlayerView(it).apply { this.player = player; useController = true } },
@@ -356,105 +350,102 @@ fun ArnixCinemaApp() {
                 }
             }
         }
+
+        availableUpdate?.let { update ->
+            AlertDialog(
+                onDismissRequest = { if (!updateDownloading) availableUpdate = null },
+                title = { Text("Доступно обновление ARNIX Cinema") },
+                text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Новая версия: ${update.versionName}")
+                    if (update.releaseNotes.isNotBlank()) Text(update.releaseNotes)
+                    if (updateDownloading) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Загружаем APK…") }
+                    updateError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                } },
+                confirmButton = { TextButton(enabled = !updateDownloading, onClick = {
+                    updateDownloading = true; updateError = null
+                    scope.launch {
+                        try { AppUpdater.downloadAndInstall(context, update) }
+                        catch (e: Exception) { updateError = e.message ?: "Не удалось установить обновление." }
+                        finally { updateDownloading = false }
+                    }
+                }) { Text("Обновить") } },
+                dismissButton = { TextButton(enabled = !updateDownloading, onClick = { availableUpdate = null }) { Text("Позже") } }
+            )
+        }
     }
 }
 
 @Composable
-private fun TitleGrid(items: List<RezkaTitle>, onSelect: (RezkaTitle) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(vertical = 8.dp)) {
-        items(items) { title -> TitleCard(title, Modifier.fillMaxWidth()) { onSelect(title) } }
+private fun MediaGrid(items: List<MediaTitle>, onSelect: (MediaTitle) -> Unit) {
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+        items(items) { item -> MediaCard(item, Modifier.fillMaxWidth()) { onSelect(item) } }
     }
 }
 
 @Composable
-private fun TitleCard(item: RezkaTitle, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    var posterFailed by remember(item.image) { mutableStateOf(false) }
-    Row(modifier.clip(RoundedCornerShape(12.dp)).background(SurfaceDark).clickable(onClick = onClick)
-        .padding(8.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (item.image.isNotBlank() && !posterFailed) {
-            AsyncImage(model = item.image, contentDescription = item.title,
-                modifier = Modifier.width(82.dp).height(118.dp).clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop,
-                onError = { posterFailed = true })
-        } else {
-            Box(Modifier.width(82.dp).height(118.dp).clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF263445)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.VideoLibrary, contentDescription = null,
-                    tint = Accent, modifier = Modifier.size(30.dp))
-            }
+private fun MediaCard(item: MediaTitle, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(modifier.clip(RoundedCornerShape(12.dp)).background(SurfaceDark).clickable(onClick = onClick).padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (item.poster.isNotBlank()) AsyncImage(model = item.poster, contentDescription = item.title,
+            modifier = Modifier.width(82.dp).height(118.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+        else Box(Modifier.width(82.dp).height(118.dp).background(Color(0xFF263445)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.VideoLibrary, null, tint = Accent)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(item.title.ifBlank { "Без названия" }, color = TextPrimary,
-                fontWeight = FontWeight.SemiBold, maxLines = 3)
+            Text(item.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 3)
             if (item.year.isNotBlank()) Text(item.year, color = TextSecondary, fontSize = 12.sp)
-            if (item.rating > 0) Text("★ ${item.rating}", color = Color(0xFFFFC857), fontSize = 12.sp)
-            if (item.category.isNotBlank()) Text(item.category, color = Accent, fontSize = 11.sp)
+            if (item.rating > 0) Text("★ ${"%.1f".format(item.rating)}", color = Color(0xFFFFC857), fontSize = 12.sp)
+            Text(if (item.mediaType == "tv") "Сериал" else "Фильм", color = Accent, fontSize = 11.sp)
         }
     }
 }
 
 @Composable
 private fun DetailScreen(
-    item: RezkaTitle, details: RezkaDetails?, loading: Boolean,
-    onBack: () -> Unit, onFavorite: () -> Unit,
-    onPlay: (Int?, Int?, String?) -> Unit
+    item: MediaTitle, details: MediaDetails?, loading: Boolean, season: Int, episode: Int,
+    onSeason: (Int) -> Unit, onEpisode: (Int) -> Unit, onBack: () -> Unit,
+    onFavorite: () -> Unit, onPlay: () -> Unit, onPlayEpisode: () -> Unit
 ) {
     BackHandler(onBack = onBack)
-    var season by remember(item.url) { mutableIntStateOf(1) }
-    var episode by remember(item.url) { mutableIntStateOf(1) }
-    var translator by remember(item.url) { mutableStateOf<String?>(null) }
     val seasons = details?.seasons.orEmpty()
-    val selectedSeason = seasons.firstOrNull { it.season == season } ?: seasons.firstOrNull()
-    val episodes = selectedSeason?.episodes.orEmpty()
     Column(Modifier.fillMaxSize().background(Bg)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Назад", tint = TextPrimary) }
             Text(details?.title ?: item.title, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f))
+                modifier = Modifier.weight(1f), maxLines = 1)
             IconButton(onClick = onFavorite) { Icon(Icons.Default.Favorite, "В избранное", tint = Accent) }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
             item {
-                AsyncImage(model = details?.poster?.ifBlank { null } ?: item.image.ifBlank { null },
-                    contentDescription = item.title, modifier = Modifier.fillMaxWidth().height(270.dp),
-                    contentScale = ContentScale.Crop)
+                val backdrop = details?.backdrop?.ifBlank { null } ?: item.backdrop.ifBlank { item.poster }
+                AsyncImage(model = backdrop, contentDescription = item.title,
+                    modifier = Modifier.fillMaxWidth().height(240.dp), contentScale = ContentScale.Crop)
             }
             item {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(details?.title ?: item.title, color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Black)
                     val rating = details?.rating ?: item.rating
-                    if (rating > 0) Text("★ $rating  ·  HDRezka", color = Color(0xFFFFC857))
-                    Text(details?.description?.ifBlank { null } ?: item.description.ifBlank { "Описание отсутствует." },
+                    if (rating > 0) Text("★ ${"%.1f".format(rating)}  ·  ${details?.year ?: item.year}", color = Color(0xFFFFC857))
+                    Text(details?.overview?.ifBlank { null } ?: item.overview.ifBlank { "Описание отсутствует." },
                         color = TextSecondary, lineHeight = 22.sp)
-                    Button(onClick = { onPlay(null, null, translator) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Смотреть")
-                    }
+                    Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) { Text("Найти источники и смотреть") }
                     if (seasons.isNotEmpty()) {
                         Text("СЕЗОН", color = Accent, fontWeight = FontWeight.Bold)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(seasons) { s ->
-                                FilterChip(selected = season == s.season, onClick = {
-                                    season = s.season; episode = s.episodes.firstOrNull()?.episode ?: 1
-                                }, label = { Text(s.title.ifBlank { "Сезон ${s.season}" }) })
+                                FilterChip(selected = season == s.number, onClick = { onSeason(s.number) },
+                                    label = { Text(s.name) })
                             }
                         }
-                        Text("СЕРИЯ", color = Accent, fontWeight = FontWeight.Bold)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(episodes) { ep ->
-                                FilterChip(selected = episode == ep.episode, onClick = {
-                                    episode = ep.episode
-                                    translator = ep.translations.firstOrNull()?.id
-                                }, label = { Text(ep.title.ifBlank { "Серия ${ep.episode}" }) })
-                            }
+                        Text("Серия №", color = Accent, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = { onEpisode((episode - 1).coerceAtLeast(1)) }) { Text("−") }
+                            Text(episode.toString(), color = TextPrimary)
+                            OutlinedButton(onClick = { onEpisode((episode + 1).coerceAtMost(100)) }) { Text("+") }
                         }
-                        Button(onClick = { onPlay(season, episode, translator) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Смотреть серию ${episode}")
-                        }
+                        Button(onClick = onPlayEpisode, modifier = Modifier.fillMaxWidth()) { Text("Найти серию в Lampac") }
                     }
-                    if (item.category.isNotBlank()) Text("Категория: ${item.category}", color = TextSecondary)
                 }
             }
         }
