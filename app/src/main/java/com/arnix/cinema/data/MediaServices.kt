@@ -185,7 +185,9 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             val key = o.optString("balanser").ifBlank { url.substringAfterLast("/lite/").substringBefore("?").ifBlank { name.lowercase() } }
             result.add(LampacProvider(name, key, url, o.optBoolean("show", true)))
         }
-        return result.distinctBy { it.provider }
+        val unique = result.distinctBy { it.provider }
+        val working = unique.filter { it.available }
+        return working.ifEmpty { unique }
     }
 
     private fun parseJson(body: String, label: String): Any? {
