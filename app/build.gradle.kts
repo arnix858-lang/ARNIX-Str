@@ -13,6 +13,7 @@ android {
         applicationId = "com.arnix.cinema"
         minSdk = 24
         targetSdk = 35
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         // CI increments this value for every build, allowing Android to install updates.
         versionCode = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toInt() ?: 1
         versionName = "1.0.$versionCode"
@@ -31,15 +32,6 @@ android {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
-        }
-    }
-
-    defaultConfig {
-        python {
-            version = "3.11"
-            pip {
-                install("HdRezkaApi==11.2.3")
-            }
         }
     }
 
@@ -70,4 +62,14 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        pip {
+            install("HdRezkaApi==11.2.3")
+        }
+    }
 }
