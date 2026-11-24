@@ -8,10 +8,10 @@ from HdRezkaApi.search import HdRezkaSearch
 
 DEFAULT_ORIGIN = "https://hdrezka.ax"
 CATEGORY_PATHS = {
-    "Фильмы": "/movies/",
-    "Сериалы": "/series/",
-    "Мультфильмы": "/cartoons/",
-    "Аниме": "/animation/",
+    "Фильмы": "/movies",
+    "Сериалы": "/series",
+    "Мультфильмы": "/cartoons",
+    "Аниме": "/animation",
 }
 
 def _safe_url(value):
@@ -25,11 +25,18 @@ def _rating(value):
     except (TypeError, ValueError):
         return 0.0
 
+def _image_url(value):
+    # Poster images may be hosted on a separate CDN.
+    image = urljoin(DEFAULT_ORIGIN, str(value or "").strip())
+    parsed = urlparse(image)
+    return image if parsed.scheme in ("http", "https") else ""
+
+
 def _item(title, url, image="", rating=0, description="", category="", year=""):
     return {
         "title": str(title or "").strip(),
         "url": _safe_url(url),
-        "image": _safe_url(image),
+        "image": _image_url(image),
         "rating": _rating(rating),
         "description": str(description or "").strip(),
         "category": str(category or ""),
@@ -39,34 +46,72 @@ def _item(title, url, image="", rating=0, description="", category="", year=""):
 def _parse_cards(html, category):
     soup = BeautifulSoup(html, "html.parser")
     found = []
-    selectors = [
-        ".b-content__inline_item",
-        ".b-content__inline_item-cover",
-        ".b-content__inline_item-link",
-        ".b-content__inline_item"
-    ]
-    cards = soup.select(".b-content__inline_item")
+    cards = soup.select(
+        ".b-content__inline_item, .b-content__inline_item-cover, "
+        ".short-item, .movie-item, .film-item, .catalog-item"
+    )
+
+    # Newer pages may no longer use the legacy DLE card wrapper.
     if not cards:
-        cards = soup.select("div[id^='post'], .b-content__inline_item-cover")
+        cards = []
+        for link in soup.select("a[href]"):
+            href = str(link.get("href", ""))
+            if re.search(r"\\.html(?:$|[?#])", href) or re.search(
+                r"/(?:films?|movies|series|cartoons|animation)/[^/?#]+", href
+            ):
+                cards.append(link)
+
+    seen = set()
     for card in cards:
-        link = card.select_one(".b-content__inline_item-link a[href]") or card.select_one("a[href]")
+        if getattr(card, "name", "") == "a":
+            link = card
+            container = card
+            for _ in range(5):
+                if container.parent is None:
+                    break
+                container = container.parent
+                if container.select_one("img"):
+                    break
+        else:
+            link = (card.select_one(".b-content__inline_item-link a[href]")
+                    or card.select_one("a[href]"))
+            container = card
         if not link:
             continue
-        title = link.get("title") or link.get_text(" ", strip=True)
-        url = _safe_url(link.get("href"))
-        image_node = card.select_one("img")
+
+        url = _safe_url(link.get("href", ""))
+        if not url or url in seen:
+            continue
+
+        image_node = container.select_one("img") if hasattr(container, "select_one") else None
+        title = (link.get("title") or link.get_text(" ", strip=True)
+                 or (image_node.get("alt", "") if image_node else "")
+                 or (image_node.get("title", "") if image_node else ""))
+        if not title:
+            continue
+
         image = ""
         if image_node:
-            image = (image_node.get("src") or image_node.get("data-src")
-                     or image_node.get("data-original") or image_node.get("data-lazy-src") or "")
-        desc_node = card.select_one(".b-content__inline_item-text, .b-content__inline_item-desc")
-        rating_node = card.select_one(".b-rating, .rating")
-        year_node = card.select_one(".b-content__inline_item-info, .info")
-        item = _item(title, url, image, rating_node.get_text(" ", strip=True) if rating_node else 0,
-                     desc_node.get_text(" ", strip=True) if desc_node else "",
-                     category, year_node.get_text(" ", strip=True) if year_node else "")
-        if item["url"]:
+            image = (image_node.get("data-src") or image_node.get("data-original")
+                     or image_node.get("data-lazy-src") or image_node.get("src") or "")
+        desc_node = container.select_one(
+            ".b-content__inline_item-text, .b-content__inline_item-desc, "
+            ".description, .short-description"
+        ) if hasattr(container, "select_one") else None
+        rating_node = container.select_one(".b-rating, .rating") if hasattr(container, "select_one") else None
+        year_node = container.select_one(
+            ".b-content__inline_item-info, .info, .year"
+        ) if hasattr(container, "select_one") else None
+        item = _item(
+            title, url, image,
+            rating_node.get_text(" ", strip=True) if rating_node else 0,
+            desc_node.get_text(" ", strip=True) if desc_node else "",
+            category,
+            year_node.get_text(" ", strip=True) if year_node else ""
+        )
+        if item["title"] and item["url"]:
             found.append(item)
+            seen.add(url)
     return found
 
 def catalog_json(category="Фильмы", page=1):
@@ -75,11 +120,15 @@ def catalog_json(category="Фильмы", page=1):
     url = urljoin(DEFAULT_ORIGIN, CATEGORY_PATHS[category])
     if page > 1:
         url = urljoin(url, "page/" + str(page) + "/")
-    response = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"})
+    response = requests.get(url, timeout=25, headers={
+        "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+        "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+        "Referer": DEFAULT_ORIGIN + "/"
+    })
     response.raise_for_status()
     items = _parse_cards(response.text, category)
     if not items:
-        fallback_path = "/films/" if CATEGORY_PATHS[category] == "/movies/" else CATEGORY_PATHS[category]
+        fallback_path = "/films/" if CATEGORY_PATHS[category] == "/movies" else CATEGORY_PATHS[category] + "/"
         fallback_url = urljoin(DEFAULT_ORIGIN, fallback_path)
         if page > 1:
             fallback_url = urljoin(fallback_url, "page/" + str(page) + "/")
