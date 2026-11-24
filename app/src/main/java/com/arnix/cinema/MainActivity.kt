@@ -501,14 +501,6 @@ private fun CatalogScreen(
                         )
                     }
                 }
-                if (genresError != null || genres.isEmpty()) {
-                    Text(
-                        genresError ?: "Список жанров пока пуст.",
-                        color = if (genresError != null) Color(0xFFFF8A80) else TextSecondary,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(start = 4.dp, top = 3.dp)
-                    )
-                }
             }
             Box(Modifier.weight(0.85f)) {
                 OutlinedButton(
@@ -533,6 +525,14 @@ private fun CatalogScreen(
                     }
                 }
             }
+        }
+        if (genresError != null || genres.isEmpty()) {
+            Text(
+                genresError ?: "Список жанров пока пуст.",
+                color = if (genresError != null) Color(0xFFFF8A80) else TextSecondary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = if (isTvLayout) 30.dp else 18.dp)
+            )
         }
 
         Row(
