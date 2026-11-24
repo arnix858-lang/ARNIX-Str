@@ -515,11 +515,16 @@ private fun CatalogScreen(
                 DropdownMenu(
                     expanded = yearMenu,
                     onDismissRequest = { yearMenu = false },
-                    modifier = Modifier.heightIn(max = if (isTvLayout) 480.dp else 360.dp).background(Color.White)
+                    modifier = Modifier.heightIn(max = if (isTvLayout) 480.dp else 360.dp)
+                        .background(SurfaceDark),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     years.forEach { option ->
                         DropdownMenuItem(
-                            text = { Text(if (option == "Любой") "Любой год" else option) },
+                            text = { Text(
+                                if (option == "Любой") "Любой год" else option,
+                                color = TextPrimary
+                            ) },
                             onClick = { onYear(option); yearMenu = false }
                         )
                     }
