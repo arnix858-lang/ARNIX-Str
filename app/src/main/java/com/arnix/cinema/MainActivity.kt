@@ -333,7 +333,7 @@ fun ArnixCinemaApp() {
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     when {
-                        selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
+                        selected != null -> DetailScreen(selected!!, api = api, apiKey = TmdbKey.value, onBack = { selected = null }, onFavorite = {
                             if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                         })
                         tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
