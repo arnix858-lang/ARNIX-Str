@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.verticalScroll
@@ -574,12 +575,19 @@ private fun PosterCard(
 ) {
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val cardWidth = if (configuration.screenWidthDp < 360) 116.dp else width
+    var focused by remember { mutableStateOf(false) }
     Column(
         Modifier
             .width(cardWidth)
+            .border(
+                width = if (focused) 3.dp else 0.dp,
+                color = if (focused) Accent else Color.Transparent,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(if (focused) 3.dp else 0.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Transparent)
-            .onFocusChanged { }
+            .onFocusChanged { focused = it.isFocused }
             .focusable()
             .clickable { onSelect(item) }
     ) {
