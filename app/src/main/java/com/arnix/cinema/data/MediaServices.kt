@@ -171,7 +171,7 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         val result = mutableListOf<LampacProvider>()
         for (i in 0 until array.length()) {
             val o = array.optJSONObject(i) ?: continue
-            val url = o.optString("url")
+            val url = secureLampac(o.optString("url"))
             val name = o.optString("name").ifBlank { o.optString("balanser", "Источник") }
             val key = o.optString("balanser").ifBlank { url.substringAfterLast("/lite/").substringBefore("?").ifBlank { name.lowercase() } }
             result.add(LampacProvider(name, key, url, o.optBoolean("show", true)))
@@ -201,7 +201,7 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
                 while (keys.hasNext()) {
                     val key = keys.next()
                     val child = value.opt(key)
-                    if (child is String && isPlayable(child)) output.add(LampacStream("$fallback · $label", child, headers))
+                    if (child is String && isPlayable(child)) output.add(LampacStream("$fallback · $label", secureLampac(child), headers))
                     else collectStreams(child, fallback, output, depth + 1)
                 }
             }
@@ -209,7 +209,7 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         }
     }
 
-    private fun isPlayable(value: String): Boolean {
+    private fun secureLampac(value: String): String = value.replace("http://arnix-lampac-test.onrender.com", baseUrl, ignoreCase = true)\n\n    private fun isPlayable(value: String): Boolean {
         val v = value.trim()
         if (!v.startsWith("http://") && !v.startsWith("https://")) return false
         val lower = v.lowercase()
