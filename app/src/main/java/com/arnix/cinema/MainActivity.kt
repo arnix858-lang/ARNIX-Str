@@ -1,6 +1,7 @@
 package com.arnix.cinema
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -822,11 +823,30 @@ private fun DetailScreen(
                 Text(info!!.tagline!!, color = TextSecondary, fontSize = 15.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Button(
-                    onClick = onFavorite,
+                    onClick = {
+                        Toast.makeText(
+                            context,
+                            "Просмотр будет доступен после подключения видеопотока.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     shape = RoundedCornerShape(13.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Icon(Icons.Default.Tv, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  Смотреть", fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = onFavorite,
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(13.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
                 ) {
                     Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("  В избранное", fontWeight = FontWeight.SemiBold)
