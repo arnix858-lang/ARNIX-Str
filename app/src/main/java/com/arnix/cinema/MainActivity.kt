@@ -757,7 +757,7 @@ private fun DetailScreen(
     val scroll = rememberScrollState()
     val context = LocalContext.current
 
-    Column(Modifier.fillMaxSize().background(Bg)) {
+    Column(Modifier.fillMaxSize().background(Bg).verticalScroll(scroll)) {
         Box(Modifier.fillMaxWidth().heightIn(min = 250.dp, max = 390.dp)) {
             AsyncImage(
                 model = backdrop?.let { "https://image.tmdb.org/t/p/w1280$it" },
@@ -820,7 +820,7 @@ private fun DetailScreen(
         }
 
         Column(
-            Modifier.fillMaxSize().verticalScroll(scroll).padding(
+            Modifier.fillMaxWidth().padding(
                 horizontal = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 34.dp else 18.dp,
                 vertical = 16.dp
             ),
