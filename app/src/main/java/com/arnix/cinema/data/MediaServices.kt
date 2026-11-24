@@ -189,7 +189,7 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         // Alloha is a preferred source: keep it visible even if Lampac marks it as not pre-checked,
         // and place it at the top whenever the server returns it.
         val visible = unique.filter { it.available || isAlloha(it) }
-        val ordered = (visible.ifEmpty { unique }).sortedBy { if (isAlloha(it) } 0 else 1 }
+        val ordered = (visible.ifEmpty { unique }).sortedBy { if (isAlloha(it) ) 0 else 1 }
         return ordered
     }
 
