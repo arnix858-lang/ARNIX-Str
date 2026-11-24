@@ -209,7 +209,9 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         }
     }
 
-    private fun secureLampac(value: String): String = value.replace("http://arnix-lampac-test.onrender.com", baseUrl, ignoreCase = true)\n\n    private fun isPlayable(value: String): Boolean {
+    private fun secureLampac(value: String): String = value.replace("http://arnix-lampac-test.onrender.com", baseUrl, ignoreCase = true)
+
+    private fun isPlayable(value: String): Boolean {
         val v = value.trim()
         if (!v.startsWith("http://") && !v.startsWith("https://")) return false
         val lower = v.lowercase()
