@@ -16,7 +16,7 @@ android {
         // CI increments this value for every build, allowing Android to install updates.
         versionCode = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toInt() ?: 1
         versionName = "1.0.$versionCode"
-        buildConfigField("String", "TMDB_API_KEY", "\"${providers.environmentVariable("TMDB_API_KEY").orNull ?: ""}\"").orNull ?: ""}\\"")
+        buildConfigField("String", "TMDB_API_KEY", "\"${providers.environmentVariable("TMDB_API_KEY").orNull ?: ""}\"")
     }
 
     signingConfigs {
