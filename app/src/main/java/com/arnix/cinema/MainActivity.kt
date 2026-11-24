@@ -358,13 +358,15 @@ private fun TitleGrid(items: List<RezkaTitle>, onSelect: (RezkaTitle) -> Unit) {
 
 @Composable
 private fun TitleCard(item: RezkaTitle, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var posterFailed by remember(item.image) { mutableStateOf(false) }
     Row(modifier.clip(RoundedCornerShape(12.dp)).background(SurfaceDark).clickable(onClick = onClick)
         .padding(8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (item.image.isNotBlank()) {
+        if (item.image.isNotBlank() && !posterFailed) {
             AsyncImage(model = item.image, contentDescription = item.title,
                 modifier = Modifier.width(82.dp).height(118.dp).clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop)
+                contentScale = ContentScale.Crop,
+                onError = { posterFailed = true })
         } else {
             Box(Modifier.width(82.dp).height(118.dp).clip(RoundedCornerShape(8.dp))
                 .background(Color(0xFF263445)), contentAlignment = Alignment.Center) {
@@ -373,7 +375,8 @@ private fun TitleCard(item: RezkaTitle, modifier: Modifier = Modifier, onClick: 
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(item.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 3)
+            Text(item.title.ifBlank { "Без названия" }, color = TextPrimary,
+                fontWeight = FontWeight.SemiBold, maxLines = 3)
             if (item.year.isNotBlank()) Text(item.year, color = TextSecondary, fontSize = 12.sp)
             if (item.rating > 0) Text("★ ${item.rating}", color = Color(0xFFFFC857), fontSize = 12.sp)
             if (item.category.isNotBlank()) Text(item.category, color = Accent, fontSize = 11.sp)
