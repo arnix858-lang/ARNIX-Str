@@ -6,9 +6,9 @@ from bs4 import BeautifulSoup
 from HdRezkaApi import HdRezkaApi
 from HdRezkaApi.search import HdRezkaSearch
 
-DEFAULT_ORIGIN = "https://hdrezka.ag"
+DEFAULT_ORIGIN = "https://hdrezka.ax"
 CATEGORY_PATHS = {
-    "Фильмы": "/films/",
+    "Фильмы": "/movies/",
     "Сериалы": "/series/",
     "Мультфильмы": "/cartoons/",
     "Аниме": "/animation/",
@@ -17,7 +17,7 @@ CATEGORY_PATHS = {
 def _safe_url(value):
     url = urljoin(DEFAULT_ORIGIN, str(value or ""))
     host = (urlparse(url).hostname or "").lower()
-    return url if url.startswith("https://") and (host == "hdrezka.ag" or host.endswith(".hdrezka.ag")) else ""
+    return url if url.startswith("https://") and (host == "hdrezka.ax" or host.endswith(".hdrezka.ax") or host == "hdrezka.ag" or host.endswith(".hdrezka.ag")) else ""
 
 def _rating(value):
     try:
@@ -49,13 +49,16 @@ def _parse_cards(html, category):
     if not cards:
         cards = soup.select("div[id^='post'], .b-content__inline_item-cover")
     for card in cards:
-        link = card.select_one("a[href]")
+        link = card.select_one(".b-content__inline_item-link a[href]") or card.select_one("a[href]")
         if not link:
             continue
         title = link.get("title") or link.get_text(" ", strip=True)
         url = _safe_url(link.get("href"))
         image_node = card.select_one("img")
-        image = image_node.get("src") or image_node.get("data-src") if image_node else ""
+        image = ""
+        if image_node:
+            image = (image_node.get("src") or image_node.get("data-src")
+                     or image_node.get("data-original") or image_node.get("data-lazy-src") or "")
         desc_node = card.select_one(".b-content__inline_item-text, .b-content__inline_item-desc")
         rating_node = card.select_one(".b-rating, .rating")
         year_node = card.select_one(".b-content__inline_item-info, .info")
@@ -75,6 +78,18 @@ def catalog_json(category="Фильмы", page=1):
     response = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"})
     response.raise_for_status()
     items = _parse_cards(response.text, category)
+    if not items:
+        fallback_path = "/films/" if CATEGORY_PATHS[category] == "/movies/" else CATEGORY_PATHS[category]
+        fallback_url = urljoin(DEFAULT_ORIGIN, fallback_path)
+        if page > 1:
+            fallback_url = urljoin(fallback_url, "page/" + str(page) + "/")
+        fallback = requests.get(fallback_url, timeout=20, headers={
+            "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+        })
+        fallback.raise_for_status()
+        items = _parse_cards(fallback.text, category)
+    if not items:
+        raise RuntimeError("HDRezka вернула страницу без карточек. Возможно, зеркало недоступно или показана защита сайта.")
     return json.dumps({"results": items[:60], "category": category, "page": page}, ensure_ascii=False)
 
 def search_json(query):
