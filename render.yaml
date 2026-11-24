@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: arnix-lampac-test
+    runtime: docker
+    plan: free
+    dockerfilePath: ./lampac-render/Dockerfile
+    dockerContext: ./lampac-render
+    healthCheckPath: /api/chromium/ping
+    envVars:
+      - key: DOTNET_SYSTEM_GLOBALIZATION_INVARIANT
+        value: "false"
+      - key: DOTNET_GCHeapHardLimitPercent
+        value: "65"
