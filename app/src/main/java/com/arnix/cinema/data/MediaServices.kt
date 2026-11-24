@@ -215,12 +215,15 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         }
     }
 
-    private fun collectStreams(value: Any?, fallback: String, output: MutableList<LampacStream>, depth: Int) {
+    private fun collectStreams(
+        value: Any?, fallback: String, output: MutableList<LampacStream>, depth: Int,
+        inheritedHeaders: Map<String, String> = emptyMap()
+    ) {
         if (depth > 14) return
         when (value) {
             is JSONObject -> {
                 val label = value.optString("title").ifBlank { value.optString("name").ifBlank { value.optString("quality").ifBlank { fallback } } }
-                val headers = mutableMapOf<String, String>()
+                val headers = inheritedHeaders.toMutableMap()
                 value.optJSONObject("headers")?.let { h ->
                     val keys = h.keys()
                     while (keys.hasNext()) { val k = keys.next(); headers[k] = h.optString(k) }
@@ -230,10 +233,10 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
                     val key = keys.next()
                     val child = value.opt(key)
                     if (child is String && isPlayable(child)) output.add(LampacStream("$fallback · $label", secureLampac(child), headers))
-                    else collectStreams(child, fallback, output, depth + 1)
+                    else collectStreams(child, fallback, output, depth + 1, headers)
                 }
             }
-            is JSONArray -> for (i in 0 until value.length()) collectStreams(value.opt(i), fallback, output, depth + 1)
+            is JSONArray -> for (i in 0 until value.length()) collectStreams(value.opt(i), fallback, output, depth + 1, inheritedHeaders)
         }
     }
 
