@@ -15,6 +15,45 @@ data class TmdbPage<T>(
 
 data class TmdbGenre(val id: Int, val name: String)
 data class TmdbGenreResponse(val genres: List<TmdbGenre> = emptyList())
+data class TmdbDetails(
+    val id: Int,
+    val title: String? = null,
+    val name: String? = null,
+    val overview: String? = null,
+    @SerializedName("backdrop_path") val backdropPath: String? = null,
+    @SerializedName("poster_path") val posterPath: String? = null,
+    @SerializedName("vote_average") val voteAverage: Double = 0.0,
+    @SerializedName("vote_count") val voteCount: Int = 0,
+    @SerializedName("release_date") val releaseDate: String? = null,
+    @SerializedName("first_air_date") val firstAirDate: String? = null,
+    val runtime: Int? = null,
+    @SerializedName("episode_run_time") val episodeRunTime: List<Int> = emptyList(),
+    val status: String? = null,
+    val tagline: String? = null,
+    val genres: List<TmdbGenre> = emptyList(),
+    @SerializedName("number_of_seasons") val numberOfSeasons: Int? = null,
+    @SerializedName("number_of_episodes") val numberOfEpisodes: Int? = null,
+    @SerializedName("original_language") val originalLanguage: String? = null,
+    @SerializedName("production_countries") val productionCountries: List<TmdbCountry> = emptyList()
+) {
+    val displayTitle: String get() = title ?: name ?: "Без названия"
+    val year: String get() = (releaseDate ?: firstAirDate ?: "").take(4)
+}
+data class TmdbCountry(val name: String = "")
+data class TmdbCredits(val cast: List<TmdbCast> = emptyList())
+data class TmdbCast(
+    val id: Int,
+    val name: String = "",
+    @SerializedName("character") val character: String = "",
+    @SerializedName("profile_path") val profilePath: String? = null
+)
+data class TmdbVideos(val results: List<TmdbVideo> = emptyList())
+data class TmdbVideo(
+    val key: String = "",
+    val name: String = "",
+    val site: String = "",
+    val type: String = ""
+)
 
 data class MediaItem(
     val id: Int,
@@ -68,6 +107,30 @@ interface TmdbApi {
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("page") page: Int = 1
     ): TmdbPage<MediaItem>
+
+    @GET("{type}/{id}")
+    suspend fun fullDetails(
+        @Path("type") type: String,
+        @Path("id") id: Int,
+        @Query("api_key") key: String,
+        @Query("language") language: String = "ru-RU"
+    ): TmdbDetails
+
+    @GET("{type}/{id}/credits")
+    suspend fun credits(
+        @Path("type") type: String,
+        @Path("id") id: Int,
+        @Query("api_key") key: String,
+        @Query("language") language: String = "ru-RU"
+    ): TmdbCredits
+
+    @GET("{type}/{id}/videos")
+    suspend fun videos(
+        @Path("type") type: String,
+        @Path("id") id: Int,
+        @Query("api_key") key: String,
+        @Query("language") language: String = "ru-RU"
+    ): TmdbVideos
 
     @GET("search/multi")
     suspend fun search(@Query("api_key") key: String, @Query("query") query: String, @Query("language") language: String = "ru-RU"): TmdbPage<MediaItem>
