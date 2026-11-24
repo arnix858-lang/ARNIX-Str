@@ -9,10 +9,10 @@ import java.net.URLEncoder
 import java.net.URL
 
 /**
- * Catalog and metadata are fetched through the server-side ndenissov/HDRezka client.
+ * Catalog and metadata are fetched through the server-side ndenissov/LordFilm parser.
  * Playback remains in HdRezkaService and is intentionally untouched.
  */
-class HdRezkaCatalogService private constructor() {
+class LordFilmCatalogService private constructor() {
     private val gson = Gson()
     private val baseUrl = "https://arnix-cinema-hdrezka-api.onrender.com"
 
@@ -52,6 +52,17 @@ class HdRezkaCatalogService private constructor() {
     suspend fun details(url: String): RezkaDetails {
         val encoded = URLEncoder.encode(url, "UTF-8")
         return gson.fromJson(get("/details?url=$encoded"), RezkaDetails::class.java)
+    }
+
+    suspend fun stream(url: String, translation: String? = null, season: Int? = null, episode: Int? = null): RezkaStreamResponse {
+        val encodedUrl = URLEncoder.encode(url, "UTF-8")
+        val encodedTranslation = translation?.let { "&translation=" + URLEncoder.encode(it, "UTF-8") } ?: ""
+        val seasonParam = season?.let { "&season=$it" } ?: ""
+        val episodeParam = episode?.let { "&episode=$it" } ?: ""
+        return gson.fromJson(
+            get("/stream?url=$encodedUrl$encodedTranslation$seasonParam$episodeParam"),
+            RezkaStreamResponse::class.java
+        )
     }
 
     companion object {
