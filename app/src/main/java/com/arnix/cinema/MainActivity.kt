@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
 fun ArnixCinemaApp() {
     val api = remember { TmdbApi.create() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var updateInfo by remember { mutableStateOf<AppUpdate?>(null) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateError by remember { mutableStateOf<String?>(null) }
