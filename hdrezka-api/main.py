@@ -24,7 +24,7 @@ CATEGORY_PATHS = {
 def valid_rezka_url(value: str) -> bool:
     parsed = urlparse(value)
     host = (parsed.hostname or "").lower()
-    return parsed.scheme == "https" and (host == "hdrezka.ag" or host.endswith(".hdrezka.ag"))
+    return parsed.scheme == "https" and host in {"hdrezka.ag", "rezka.ag"}
 
 def valid_catalog_url(value: str) -> bool:
     parsed = urlparse(value)
