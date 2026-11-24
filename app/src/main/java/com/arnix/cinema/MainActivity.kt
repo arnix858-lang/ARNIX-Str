@@ -1,8 +1,6 @@
 package com.arnix.cinema
 
 import android.os.Bundle
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -67,7 +65,6 @@ class MainActivity : ComponentActivity() {
 fun ArnixCinemaApp() {
     val api = remember { TmdbApi.create() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     var updateInfo by remember { mutableStateOf<AppUpdate?>(null) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateError by remember { mutableStateOf<String?>(null) }
@@ -720,7 +717,6 @@ private fun DetailScreen(
 ) {
     var details by remember(item.id) { mutableStateOf<TmdbDetails?>(null) }
     var cast by remember(item.id) { mutableStateOf<List<TmdbCast>>(emptyList()) }
-    var trailerKey by remember(item.id) { mutableStateOf<String?>(null) }
     var loadingDetails by remember(item.id) { mutableStateOf(true) }
     var detailsError by remember(item.id) { mutableStateOf(false) }
     val type = if (item.media_type == "tv" || item.firstAirDate != null) "tv" else "movie"
@@ -735,11 +731,6 @@ private fun DetailScreen(
                 val loaded = api.fullDetails(type, item.id, apiKey)
                 details = loaded
                 cast = runCatching { api.credits(type, item.id, apiKey).cast.take(12) }.getOrDefault(emptyList())
-                trailerKey = runCatching {
-                    api.videos(type, item.id, apiKey).results.firstOrNull {
-                        it.site.equals("YouTube", true) && it.type in listOf("Trailer", "Teaser")
-                    }?.key
-                }.getOrNull()
             } catch (_: Exception) {
                 detailsError = true
             } finally {
@@ -839,13 +830,6 @@ private fun DetailScreen(
                     Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("  В избранное", fontWeight = FontWeight.SemiBold)
                 }
-                if (!trailerKey.isNullOrBlank()) {
-                    OutlinedButton(
-                        onClick = { trailerKey?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$it"))) } },
-                        shape = RoundedCornerShape(13.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = .7f))
-                    ) { Text("Трейлер найден", color = Accent) }
-                }
             }
 
             if (loadingDetails) {
@@ -929,12 +913,6 @@ private fun DetailScreen(
                 }
             }
 
-            if (!trailerKey.isNullOrBlank()) {
-                Text("Трейлер: https://www.youtube.com/watch?v=$trailerKey",
-                    color = Accent, fontSize = 13.sp)
-            }
-            Text("Данные и изображения предоставлены TMDB. Каталог не содержит видеопотоков.",
-                color = TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }
 }
