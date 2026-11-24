@@ -30,16 +30,22 @@ object AppUpdater {
         val connection = (URL(RELEASE_API).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 12000
-            readTimeout = 12000
+            readTimeout = 20000
+            useCaches = false
+            setRequestProperty("Cache-Control", "no-cache")
             setRequestProperty("Accept", "application/vnd.github+json")
             setRequestProperty("User-Agent", "ARNIX-Cinema-Android")
         }
         try {
-            if (connection.responseCode !in 200..299) return null
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                throw IOException("GitHub Releases: HTTP $status")
+            }
             val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
             if (json.optBoolean("draft", false) || json.optBoolean("prerelease", false)) return null
             val tag = json.optString("tag_name").removePrefix("v")
-            val latestCode = tag.substringAfterLast('.').toLongOrNull() ?: return null
+            val latestCode = tag.substringAfterLast('.').toLongOrNull()
+                ?: throw IOException("Не удалось определить номер версии из тега: $tag")
             val currentCode = if (Build.VERSION.SDK_INT >= 28) {
                 context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
             } else {
