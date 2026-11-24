@@ -35,6 +35,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.media3.common.MediaItem as PlayerMediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.arnix.cinema.data.*
@@ -334,8 +337,11 @@ fun ArnixCinemaApp() {
         }
 
         selectedStream?.let { stream ->
-            val player = remember(stream.url) {
-                ExoPlayer.Builder(context).build().apply {
+            val player = remember(stream.url, stream.headers) {
+                val httpFactory = DefaultHttpDataSource.Factory()
+                    .setDefaultRequestProperties(stream.headers)
+                val mediaFactory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, httpFactory))
+                ExoPlayer.Builder(context).setMediaSourceFactory(mediaFactory).build().apply {
                     setMediaItem(PlayerMediaItem.fromUri(stream.url))
                     prepare()
                     playWhenReady = true
