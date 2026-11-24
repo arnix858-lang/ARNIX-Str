@@ -304,7 +304,7 @@ fun ArnixCinemaApp() {
 private fun TitleGrid(items: List<RezkaTitle>, onSelect: (RezkaTitle) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 8.dp)) {
-        items(items) { title -> TitleCard(title, Modifier.fillMaxWidth(), onSelect) }
+        items(items) { title -> TitleCard(title, Modifier.fillMaxWidth()) { onSelect(title) } }
     }
 }
 
