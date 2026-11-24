@@ -58,7 +58,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArnixCinemaApp() {
     val context = LocalContext.current
-    val api = remember { HdRezkaService.create(context) }
+    val catalogApi = remember { HdRezkaCatalogService.create(context) }
+    val videoApi = remember { HdRezkaService.create(context) }
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Главная") }
     var category by remember { mutableStateOf("Фильмы") }
@@ -86,7 +87,7 @@ fun ArnixCinemaApp() {
             loading = true
             error = null
             try {
-                val response = api.catalog(cat, nextPage)
+                val response = catalogApi.catalog(cat, nextPage)
                 catalog = if (nextPage == 1) response.results else catalog + response.results
                 page = nextPage
             } catch (e: Exception) {
@@ -104,7 +105,7 @@ fun ArnixCinemaApp() {
         selectedEpisode = 1
         scope.launch {
             loading = true
-            try { details = api.details(item.url) }
+            try { details = catalogApi.details(item.url) }
             catch (e: Exception) { error = "Не удалось загрузить карточку: ${e.message ?: "ошибка источника"}" }
             finally { loading = false }
         }
@@ -123,7 +124,7 @@ fun ArnixCinemaApp() {
         delay(400)
         searchLoading = true
         error = null
-        try { results = api.search(term).results }
+        try { results = catalogApi.search(term).results }
         catch (e: Exception) {
             results = emptyList()
             error = "Поиск HDRezka не выполнен: ${e.message ?: "источник недоступен"}"
@@ -150,7 +151,7 @@ fun ArnixCinemaApp() {
                     streamError = null
                     scope.launch {
                         try {
-                            stream = api.stream(selected!!.url, translator, season, episode)
+                            stream = videoApi.stream(selected!!.url, translator, season, episode)
                             selectedTranslator = translator ?: stream?.translators?.firstOrNull()?.id
                         } catch (e: Exception) {
                             streamError = "Не удалось получить видеоссылки: ${e.message ?: "HDRezka не вернула потоки"}"
@@ -265,7 +266,7 @@ fun ArnixCinemaApp() {
                                     val e = if (details?.seasons?.isNotEmpty() == true) selectedEpisode else null
                                     streamLoading = true
                                     scope.launch {
-                                        try { stream = api.stream(selected!!.url, translator.id, s, e) }
+                                        try { stream = videoApi.stream(selected!!.url, translator.id, s, e) }
                                         catch (ex: Exception) { streamError = ex.message ?: "Ошибка выбора озвучки" }
                                         finally { streamLoading = false }
                                     }
