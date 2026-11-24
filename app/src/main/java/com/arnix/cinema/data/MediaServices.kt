@@ -186,9 +186,18 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             result.add(LampacProvider(name, key, url, o.optBoolean("show", true)))
         }
         val unique = result.distinctBy { it.provider }
-        val working = unique.filter { it.available }
-        return working.ifEmpty { unique }
+        // Alloha is a preferred source: keep it visible even if Lampac marks it as not pre-checked,
+        // and place it at the top whenever the server returns it.
+        val visible = unique.filter { it.available || isAlloha(it) }
+        val ordered = (visible.ifEmpty { unique }).sortedBy { if (isAlloha(it) } 0 else 1 }
+        return ordered
     }
+
+    private fun isAlloha(provider: LampacProvider): Boolean =
+        provider.provider.contains("alloha", ignoreCase = true) ||
+            provider.name.contains("alloha", ignoreCase = true) ||
+            provider.name.contains("аллоха", ignoreCase = true) ||
+            provider.url.contains("alloha", ignoreCase = true)
 
     private fun parseJson(body: String, label: String): Any? {
         JSONObjectOrNull(body)?.let { return it }
