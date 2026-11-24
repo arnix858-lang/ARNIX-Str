@@ -194,37 +194,151 @@ def details_json(url):
         "seasons": seasons
     }, ensure_ascii=False)
 
+def _stream_for_url(url, translation=None, season=None, episode=None):
+    film = HdRezkaApi(url)
+    if not film.ok:
+        raise RuntimeError("Страница фильма: " + str(film.exception or "не открылась"))
+
+    is_series = season is not None and episode is not None
+    if is_series:
+        try:
+            season_info = next(
+                (s for s in (film.episodesInfo or []) if int(s.get("season", 0)) == int(season)),
+                None
+            )
+            if not season_info:
+                raise RuntimeError("Сезон " + str(season) + " не найден в карточке")
+            episode_info = next(
+                (e for e in season_info.get("episodes", []) if int(e.get("episode", 0)) == int(episode)),
+                None
+            )
+            if not episode_info:
+                raise RuntimeError("Серия " + str(episode) + " не найдена в сезоне " + str(season))
+            available = episode_info.get("translations", []) or []
+            translator_map = {
+                str(t.get("translator_id")): str(t.get("translator_name", t.get("translator_id")))
+                for t in available
+            }
+        except Exception as exc:
+            raise RuntimeError("Не удалось получить список серий/озвучек: " + str(exc)) from exc
+    else:
+        translator_map = {
+            str(key): str(value.get("name", key) if isinstance(value, dict) else value)
+            for key, value in (getattr(film, "translators", {}) or {}).items()
+        }
+
+    if not translator_map:
+        raise RuntimeError("HDRezka не вернула доступные озвучки")
+
+    if translation is not None and str(translation).strip():
+        requested = str(translation).strip()
+        if requested in translator_map:
+            translator_id = requested
+        else:
+            match = next((key for key, name in translator_map.items() if name == requested), None)
+            if match is None:
+                raise RuntimeError("Озвучка '" + requested + "' отсутствует. Доступно: " + ", ".join(translator_map.values()))
+            translator_id = match
+    else:
+        try:
+            ordered = film.sort_translators(
+                {int(key): {"name": name} for key, name in translator_map.items()}
+            )
+            translator_id = str(next(iter(ordered.keys())))
+        except Exception:
+            translator_id = next(iter(translator_map.keys()))
+
+    data = {
+        "id": film.id,
+        "translator_id": translator_id,
+        "action": "get_stream" if is_series else "get_movie"
+    }
+    if is_series:
+        data["season"] = str(season)
+        data["episode"] = str(episode)
+
+    endpoint = film.origin.rstrip("/") + "/ajax/get_cdn_series/"
+    response = requests.post(
+        endpoint,
+        data=data,
+        headers=film.HEADERS,
+        cookies=film.cookies,
+        proxies=film.proxy,
+        timeout=(12, 30)
+    )
+    if response.status_code != 200:
+        raise RuntimeError("AJAX HDRezka вернул HTTP " + str(response.status_code) + " (" + endpoint + ")")
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise RuntimeError("HDRezka AJAX вернул не JSON: " + response.text[:180]) from exc
+
+    if not payload.get("success"):
+        raise RuntimeError("HDRezka отклонила запрос потока: " + str(payload.get("message") or "success=false"))
+    encoded = payload.get("url")
+    if not encoded:
+        raise RuntimeError("HDRezka ответила успешно, но поле url пустое")
+
+    decoded = film.clearTrash(str(encoded))
+    qualities = {}
+    for part in decoded.split(","):
+        if "[" not in part or "]" not in part:
+            continue
+        before, after = part.split("]", 1)
+        quality = re.sub(r"<[^>]*>", "", before.split("[", 1)[-1]).strip()
+        links = []
+        for candidate in re.split(r"\s+or\s+", after):
+            candidate = re.sub(r"<[^>]*>", "", candidate).strip().strip("\"'")
+            candidate = candidate.replace("\\/", "/")
+            candidate = candidate.rstrip("),;")
+            if candidate.startswith(("http://", "https://")):
+                links.append(candidate)
+        if quality and links:
+            qualities[quality] = links
+
+    if not qualities:
+        raise RuntimeError("HDRezka вернула ответ без распознанных видеоссылок (возможно, изменила формат потока)")
+    subtitle_data = payload.get("subtitle") or ""
+    subtitle_codes = payload.get("subtitle_lns") or ""
+    subtitles = []
+    if isinstance(subtitle_data, str) and subtitle_data:
+        for index, link in enumerate(subtitle_data.split(",")):
+            link = link.strip()
+            if link.startswith("http"):
+                code = subtitle_codes.split(",")[index].strip() if isinstance(subtitle_codes, str) and index < len(subtitle_codes.split(",")) else "sub"
+                subtitles.append({"language": code, "url": link})
+
+    return {
+        "title": str(getattr(film, "name", "")),
+        "translators": [{"id": key, "name": value} for key, value in translator_map.items()],
+        "qualities": qualities,
+        "subtitles": subtitles
+    }
+
+
 def stream_json(url, translation=None, season=None, episode=None):
     url = _safe_url(url)
     if not url:
         raise ValueError("Недопустимая ссылка HDRezka")
-    film = HdRezkaApi(url)
-    if not film.ok:
-        raise RuntimeError(str(film.exception or "Не удалось открыть страницу"))
-    translators = getattr(film, "translators", {}) or {}
-    if season is not None and episode is not None:
-        source = film.getStream(str(season), str(episode), translation=translation)
-    else:
-        source = film.getStream(translation=translation)
-    videos = getattr(source, "videos", {}) or {}
-    subtitle_data = getattr(getattr(source, "subtitles", None), "subtitles", {}) or {}
-    subtitles = []
-    for code, value in (subtitle_data.items() if hasattr(subtitle_data, "items") else []):
-        if isinstance(value, dict):
-            subtitles.append({"language": str(value.get("title", code)), "url": str(value.get("link", ""))})
-    normalized_translators = []
-    for key, value in translators.items():
-        name = value.get("name", key) if isinstance(value, dict) else str(value)
-        normalized_translators.append({"id": str(key), "name": str(name)})
-    qualities = {}
-    if hasattr(videos, "items"):
-        for quality, links in videos.items():
-            if isinstance(links, str):
-                links = [links]
-            qualities[str(quality)] = [str(link) for link in links if str(link).startswith("http")]
-    return json.dumps({
-        "title": str(getattr(film, "name", "")),
-        "translators": normalized_translators,
-        "qualities": qualities,
-        "subtitles": subtitles
-    }, ensure_ascii=False)
+
+    parsed = urlparse(url)
+    path = parsed.path
+    query = ("?" + parsed.query) if parsed.query else ""
+    hosts = [parsed.netloc]
+    for host in ("hdrezka.ag", "hdrezka.ax"):
+        if host not in hosts:
+            hosts.append(host)
+
+    errors = []
+    for host in hosts:
+        candidate = "https://" + host + path + query
+        try:
+            result = _stream_for_url(candidate, translation, season, episode)
+            result["source_host"] = host
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as exc:
+            errors.append(host + ": " + str(exc))
+            # Retry another official mirror only for an HTTP/mirror or AJAX failure.
+            continue
+
+    raise RuntimeError("Не удалось получить поток ни с одного зеркала HDRezka. " + " | ".join(errors))
