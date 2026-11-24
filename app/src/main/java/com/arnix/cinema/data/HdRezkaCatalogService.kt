@@ -9,8 +9,8 @@ import java.net.URLEncoder
 import java.net.URL
 
 /**
- * Catalog and metadata are fetched through the server-side ndenissov/LordFilm parser.
- * Playback remains in HdRezkaService and is intentionally untouched.
+ * Catalog, metadata and public media URLs are fetched through the LordFilm bridge.
+ * ExoPlayer UI and playback controls remain unchanged.
  */
 class LordFilmCatalogService private constructor() {
     private val gson = Gson()
@@ -66,6 +66,6 @@ class LordFilmCatalogService private constructor() {
     }
 
     companion object {
-        fun create(context: Context): HdRezkaCatalogService = HdRezkaCatalogService()
+        fun create(context: Context): LordFilmCatalogService = LordFilmCatalogService()
     }
 }
