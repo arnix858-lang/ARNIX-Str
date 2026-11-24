@@ -751,7 +751,8 @@ private fun DetailScreen(
     onBack: () -> Unit,
     onFavorite: () -> Unit
 ) {
-    val rezkaApi = remember { HdRezkaService.create() }
+    val context = LocalContext.current
+    val rezkaApi = remember(context) { HdRezkaService.create(context) }
     val scope = rememberCoroutineScope()
     var rezkaSearching by remember { mutableStateOf(false) }
     var rezkaError by remember { mutableStateOf<String?>(null) }
@@ -999,7 +1000,7 @@ private fun DetailScreen(
                                 rezkaResults = rezkaApi.search(title).results
                                 if (rezkaResults.isEmpty()) rezkaError = "На HDRezka ничего не найдено."
                             } catch (_: Exception) {
-                                rezkaError = "Не удалось связаться с HDRezka API. Проверьте адрес сервера."
+                                rezkaError = "Не удалось выполнить поиск HDRezka. Возможно, сайт временно недоступен или требует проверки доступа."
                             } finally { rezkaSearching = false }
                         }
                     },
