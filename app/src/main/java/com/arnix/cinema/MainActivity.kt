@@ -38,8 +38,10 @@ import com.arnix.cinema.data.*
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.common.MediaItem as PlayerMediaItem
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Bg = Color(0xFF090D14)
 private val SurfaceDark = Color(0xFF141B26)
@@ -81,6 +83,9 @@ fun ArnixCinemaApp() {
     var streamLoading by remember { mutableStateOf(false) }
     var streamError by remember { mutableStateOf<String?>(null) }
     var playerUrl by remember { mutableStateOf<String?>(null) }
+    var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+    var updateDownloading by remember { mutableStateOf(false) }
+    var updateError by remember { mutableStateOf<String?>(null) }
 
     fun loadCategory(cat: String, nextPage: Int = 1) {
         scope.launch {
@@ -112,6 +117,9 @@ fun ArnixCinemaApp() {
     }
 
     LaunchedEffect(Unit) {
+        availableUpdate = runCatching {
+            withContext(Dispatchers.IO) { AppUpdater.checkForUpdate(context) }
+        }.getOrNull()
         Categories.forEach { cat ->
             runCatching { homeLists = homeLists + (cat to catalogApi.catalog(cat, 1).results.take(18)) }
         }
@@ -241,6 +249,45 @@ fun ArnixCinemaApp() {
                     }
                 }
             }
+        }
+
+
+        availableUpdate?.let { update ->
+            AlertDialog(
+                onDismissRequest = { if (!updateDownloading) availableUpdate = null },
+                title = { Text("Доступно обновление ARNIX Cinema") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Новая версия: ${update.versionName}")
+                        if (update.releaseNotes.isNotBlank()) Text(update.releaseNotes)
+                        if (updateDownloading) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                            Text("Загружаем APK… Не закрывайте приложение.")
+                        }
+                        updateError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !updateDownloading, onClick = {
+                        updateDownloading = true
+                        updateError = null
+                        scope.launch {
+                            try {
+                                AppUpdater.downloadAndInstall(context, update)
+                            } catch (e: Exception) {
+                                updateError = e.message ?: "Не удалось установить обновление."
+                            } finally {
+                                updateDownloading = false
+                            }
+                        }
+                    }) { Text("Обновить") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !updateDownloading, onClick = { availableUpdate = null }) {
+                        Text("Позже")
+                    }
+                }
+            )
         }
 
         streamLoading.let { busy ->
