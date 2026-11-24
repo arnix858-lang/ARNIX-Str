@@ -113,7 +113,7 @@ fun ArnixCinemaApp() {
 
     LaunchedEffect(Unit) {
         Categories.forEach { cat ->
-            runCatching { homeLists = homeLists + (cat to api.catalog(cat, 1).results.take(18)) }
+            runCatching { homeLists = homeLists + (cat to catalogApi.catalog(cat, 1).results.take(18)) }
         }
     }
 
