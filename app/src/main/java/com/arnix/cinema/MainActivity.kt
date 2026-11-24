@@ -117,9 +117,20 @@ fun ArnixCinemaApp() {
     }
 
     LaunchedEffect(Unit) {
-        availableUpdate = runCatching {
-            withContext(Dispatchers.IO) { AppUpdater.checkForUpdate(context) }
-        }.getOrNull()
+        // Check immediately, then repeat while the app remains open. A failed
+        // GitHub request is logged and retried on the next cycle, not swallowed forever.
+        launch {
+            while (true) {
+                runCatching {
+                    withContext(Dispatchers.IO) { AppUpdater.checkForUpdate(context) }
+                }.onSuccess { update ->
+                    if (update != null) availableUpdate = update
+                }.onFailure { cause ->
+                    android.util.Log.w("ARNIX-Updater", "Update check failed", cause)
+                }
+                delay(2 * 60 * 60 * 1000L)
+            }
+        }
         Categories.forEach { cat ->
             runCatching { homeLists = homeLists + (cat to catalogApi.catalog(cat, 1).results.take(18)) }
         }
