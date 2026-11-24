@@ -60,8 +60,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ArnixCinemaApp() {
     val context = LocalContext.current
-    val catalogApi = remember { HdRezkaCatalogService.create(context) }
-    val videoApi = remember { HdRezkaService.create(context) }
+    val catalogApi = remember { LordFilmCatalogService.create(context) }
+    
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Главная") }
     var category by remember { mutableStateOf("Фильмы") }
@@ -96,7 +96,7 @@ fun ArnixCinemaApp() {
                 catalog = if (nextPage == 1) response.results else catalog + response.results
                 page = nextPage
             } catch (e: Exception) {
-                error = "Не удалось загрузить раздел HDRezka: ${e.message ?: "источник недоступен"}"
+                error = "Не удалось загрузить раздел LordFilm: ${e.message ?: "источник недоступен"}"
             } finally { loading = false }
         }
     }
@@ -135,7 +135,7 @@ fun ArnixCinemaApp() {
         try { results = catalogApi.search(term).results }
         catch (e: Exception) {
             results = emptyList()
-            error = "Поиск HDRezka не выполнен: ${e.message ?: "источник недоступен"}"
+            error = "Поиск LordFilm не выполнен: ${e.message ?: "источник недоступен"}"
         } finally { searchLoading = false }
     }
 
@@ -159,10 +159,10 @@ fun ArnixCinemaApp() {
                     streamError = null
                     scope.launch {
                         try {
-                            stream = videoApi.stream(selected!!.url, translator, season, episode)
+                            stream = catalogApi.stream(selected!!.url, translator, season, episode)
                             selectedTranslator = translator ?: stream?.translators?.firstOrNull()?.id
                         } catch (e: Exception) {
-                            streamError = "Не удалось получить видеоссылки: ${e.message ?: "HDRezka не вернула потоки"}"
+                            streamError = "Не удалось получить видеоссылки: ${e.message ?: "LordFilm не вернула потоки"}"
                         } finally { streamLoading = false }
                     }
                 }
@@ -191,7 +191,7 @@ fun ArnixCinemaApp() {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         when (tab) {
                             "Поиск" -> Column(Modifier.fillMaxSize().padding(16.dp)) {
-                                Text("Поиск HDRezka", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                Text("Поиск LordFilm", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                                 OutlinedTextField(value = query, onValueChange = { query = it },
                                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                                     placeholder = { Text("Название фильма или сериала") }, singleLine = true)
@@ -200,7 +200,7 @@ fun ArnixCinemaApp() {
                                 TitleGrid(results, ::openTitle)
                             }
                             "Каталог" -> Column(Modifier.fillMaxSize().padding(16.dp)) {
-                                Text("Каталог HDRezka", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                Text("Каталог LordFilm", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.padding(vertical = 12.dp)) {
                                     items(Categories) { cat ->
@@ -226,7 +226,7 @@ fun ArnixCinemaApp() {
                                         contentAlignment = Alignment.BottomStart) {
                                         Column(Modifier.padding(20.dp)) {
                                             Text("ARNIX CINEMA", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            Text("Фильмы и сериалы HDRezka", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
+                                            Text("Фильмы и сериалы LordFilm", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
                                             Text("Каталог загружается непосредственно из источника", color = TextSecondary)
                                         }
                                     }
@@ -292,11 +292,11 @@ fun ArnixCinemaApp() {
 
         streamLoading.let { busy ->
             if (busy) AlertDialog(onDismissRequest = {}, title = { Text("Получение видеоссылок") },
-                text = { Column { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Запрашиваем потоки HDRezka…") } },
+                text = { Column { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Запрашиваем потоки LordFilm…") } },
                 confirmButton = {})
         }
         streamError?.let { msg ->
-            AlertDialog(onDismissRequest = { streamError = null }, title = { Text("HDRezka") },
+            AlertDialog(onDismissRequest = { streamError = null }, title = { Text("LordFilm") },
                 text = { Text(msg) }, confirmButton = { TextButton(onClick = { streamError = null }) { Text("Закрыть") } })
         }
         stream?.let { data ->
@@ -313,7 +313,7 @@ fun ArnixCinemaApp() {
                                     val e = if (details?.seasons?.isNotEmpty() == true) selectedEpisode else null
                                     streamLoading = true
                                     scope.launch {
-                                        try { stream = videoApi.stream(selected!!.url, translator.id, s, e) }
+                                        try { stream = catalogApi.stream(selected!!.url, translator.id, s, e) }
                                         catch (ex: Exception) { streamError = ex.message ?: "Ошибка выбора озвучки" }
                                         finally { streamLoading = false }
                                     }
@@ -415,7 +415,7 @@ private fun DetailScreen(
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(details?.title ?: item.title, color = TextPrimary, fontSize = 25.sp, fontWeight = FontWeight.Black)
                     val rating = details?.rating ?: item.rating
-                    if (rating > 0) Text("★ $rating  ·  HDRezka", color = Color(0xFFFFC857))
+                    if (rating > 0) Text("★ $rating  ·  LordFilm", color = Color(0xFFFFC857))
                     Text(details?.description?.ifBlank { null } ?: item.description.ifBlank { "Описание отсутствует." },
                         color = TextSecondary, lineHeight = 22.sp)
                     Button(onClick = { onPlay(null, null, translator) }, modifier = Modifier.fillMaxWidth()) {
