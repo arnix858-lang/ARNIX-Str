@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -750,7 +751,10 @@ private fun DetailScreen(
     val scroll = rememberScrollState()
     val context = LocalContext.current
 
-    Column(Modifier.fillMaxSize().background(Bg).verticalScroll(scroll)) {
+    BackHandler(onBack = onBack)
+
+    Box(Modifier.fillMaxSize().background(Bg)) {
+      Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
         Box(Modifier.fillMaxWidth().heightIn(min = 250.dp, max = 390.dp)) {
             AsyncImage(
                 model = backdrop?.let { "https://image.tmdb.org/t/p/w1280$it" },
@@ -761,19 +765,6 @@ private fun DetailScreen(
             Box(Modifier.fillMaxSize().background(
                 Brush.verticalGradient(listOf(Color(0x33000000), Color(0xB9090D14), Bg))
             ))
-            Surface(
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp).clickable { onBack() },
-                color = Color(0xCC111923),
-                shape = RoundedCornerShape(50),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .16f))
-            ) {
-                Row(Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Назад", tint = Color.White)
-                    Text("Назад", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
-            }
             Row(
                 Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(
                     horizontal = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 34.dp else 18.dp,
@@ -935,5 +926,20 @@ private fun DetailScreen(
             }
 
         }
+      }
+
+      Surface(
+          modifier = Modifier.align(Alignment.TopStart).padding(16.dp).clickable { onBack() },
+          color = Color(0xCC111923),
+          shape = RoundedCornerShape(50),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .16f))
+      ) {
+          Row(Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+              Icon(Icons.Default.ArrowBack, contentDescription = "Назад", tint = Color.White)
+              Text("Назад", color = Color.White, fontWeight = FontWeight.SemiBold)
+          }
+      }
     }
 }
