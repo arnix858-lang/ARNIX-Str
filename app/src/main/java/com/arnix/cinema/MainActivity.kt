@@ -39,17 +39,19 @@ import coil.compose.AsyncImage
 import com.arnix.cinema.data.MediaItem
 import com.arnix.cinema.data.TmdbApi
 import com.arnix.cinema.data.TmdbGenre
+import com.arnix.cinema.data.TmdbDetails
+import com.arnix.cinema.data.TmdbCast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
-private val Bg = Color(0xFFF5F7FB)
-private val SurfaceDark = Color(0xFFFFFFFF)
-private val Accent = Color(0xFF087FB5)
-private val TextPrimary = Color(0xFF172333)
-private val TextSecondary = Color(0xFF657386)
-private val BorderSoft = Color(0xFFE4EAF1)
+private val Bg = Color(0xFF090D14)
+private val SurfaceDark = Color(0xFF141B26)
+private val Accent = Color(0xFF45C4D6)
+private val TextPrimary = Color(0xFFF3F6FA)
+private val TextSecondary = Color(0xFFA1ADBC)
+private val BorderSoft = Color(0xFF273342)
 private const val IMAGE = "https://image.tmdb.org/t/p/w500"
 
 class MainActivity : ComponentActivity() {
@@ -176,7 +178,7 @@ fun ArnixCinemaApp() {
     MaterialTheme(colorScheme = lightColorScheme(
         background = Bg, surface = SurfaceDark, primary = Accent,
         onBackground = TextPrimary, onSurface = TextPrimary,
-        surfaceVariant = Color(0xFFEEF3F8), onSurfaceVariant = TextSecondary,
+        surfaceVariant = Color(0xFF202B38), onSurfaceVariant = TextSecondary,
         outline = BorderSoft
     )) {
         updateInfo?.let { update ->
@@ -258,7 +260,7 @@ fun ArnixCinemaApp() {
                 containerColor = Bg,
                 bottomBar = {
                     NavigationBar(
-                        containerColor = Color.White,
+                        containerColor = Color(0xFF111923),
                         contentColor = TextPrimary,
                         tonalElevation = 8.dp,
                         windowInsets = NavigationBarDefaults.windowInsets
@@ -288,7 +290,7 @@ fun ArnixCinemaApp() {
                         .background(Bg)
                 ) {
                     when {
-                        selected != null -> DetailScreen(selected!!, onBack = { selected = null }, onFavorite = {
+                        selected != null -> DetailScreen(selected!!, api = api, apiKey = TmdbKey.value, onBack = { selected = null }, onFavorite = {
                             if (favorites.none { f -> f.id == selected!!.id }) favorites.add(selected!!)
                         })
                         tab == "Поиск" -> SearchScreen(query, { query = it }, results, loading, error, { selected = it })
@@ -707,57 +709,229 @@ private fun SearchScreen(
 }
 
 @Composable
-private fun DetailScreen(item: MediaItem, onBack: () -> Unit, onFavorite: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        item {
-            Box(Modifier.fillMaxWidth().height(300.dp)) {
+private fun DetailScreen(
+    item: MediaItem,
+    api: TmdbApi,
+    apiKey: String,
+    onBack: () -> Unit,
+    onFavorite: () -> Unit
+) {
+    var details by remember(item.id) { mutableStateOf<TmdbDetails?>(null) }
+    var cast by remember(item.id) { mutableStateOf<List<TmdbCast>>(emptyList()) }
+    var trailerKey by remember(item.id) { mutableStateOf<String?>(null) }
+    var loadingDetails by remember(item.id) { mutableStateOf(true) }
+    var detailsError by remember(item.id) { mutableStateOf(false) }
+    val type = if (item.media_type == "tv" || item.firstAirDate != null) "tv" else "movie"
+
+    LaunchedEffect(item.id, type, apiKey) {
+        if (apiKey.isBlank()) {
+            loadingDetails = false
+            detailsError = true
+        } else {
+            loadingDetails = true
+            try {
+                val loaded = api.fullDetails(type, item.id, apiKey)
+                details = loaded
+                cast = runCatching { api.credits(type, item.id, apiKey).cast.take(12) }.getOrDefault(emptyList())
+                trailerKey = runCatching {
+                    api.videos(type, item.id, apiKey).results.firstOrNull {
+                        it.site.equals("YouTube", true) && it.type in listOf("Trailer", "Teaser")
+                    }?.key
+                }.getOrNull()
+            } catch (_: Exception) {
+                detailsError = true
+            } finally {
+                loadingDetails = false
+            }
+        }
+    }
+
+    val info = details
+    val backdrop = info?.backdropPath ?: item.backdropPath
+    val poster = info?.posterPath ?: item.posterPath
+    val title = info?.displayTitle ?: item.displayTitle
+    val rating = info?.voteAverage?.takeIf { it > 0 } ?: item.voteAverage
+    val year = info?.year?.ifBlank { item.year } ?: item.year
+    val scroll = rememberScrollState()
+
+    Column(Modifier.fillMaxSize().background(Bg)) {
+        Box(Modifier.fillMaxWidth().heightIn(min = 250.dp, max = 390.dp)) {
+            AsyncImage(
+                model = backdrop?.let { "https://image.tmdb.org/t/p/w1280$it" },
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            Box(Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Color(0x33000000), Color(0xB9090D14), Bg))
+            ))
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(16.dp).clickable { onBack() },
+                color = Color(0xCC111923),
+                shape = RoundedCornerShape(50),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .16f))
+            ) {
+                Row(Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Назад", tint = Color.White)
+                    Text("Назад", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Row(
+                Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(
+                    horizontal = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 34.dp else 18.dp,
+                    vertical = 18.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
                 AsyncImage(
-                    model = item.backdropPath?.let { IMAGE.replace("w500", "w1280") + it },
-                    contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
+                    model = poster?.let { "https://image.tmdb.org/t/p/w500$it" },
+                    contentDescription = title,
+                    modifier = Modifier.width(if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 142.dp else 112.dp)
+                        .aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
+                    contentScale = ContentScale.Crop
                 )
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Bg))))
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 16.dp, top = 18.dp)
-                        .clickable { onBack() },
-                    color = Color(0xF2FFFFFF),
-                    shape = RoundedCornerShape(24.dp),
-                    shadowElevation = 6.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                Column(Modifier.weight(1f)) {
+                    Text(if (type == "tv") "СЕРИАЛ" else "ФИЛЬМ",
+                        color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text(title, color = Color.White,
+                        fontSize = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 30.sp else 23.sp,
+                        lineHeight = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 36.sp else 28.sp,
+                        fontWeight = FontWeight.Black, maxLines = 3,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    if (year.isNotBlank()) Text(year, color = Color.White.copy(alpha = .8f),
+                        modifier = Modifier.padding(top = 5.dp))
+                    if (rating > 0) Row(
+                        modifier = Modifier.padding(top = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Назад",
-                            tint = TextPrimary,
-                            modifier = Modifier.size(19.dp)
-                        )
-                        Text(
-                            "Назад",
-                            color = TextPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text("★", color = Color(0xFFFFC857))
+                        Text(String.format("%.1f", rating), color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("  TMDB", color = Color.White.copy(alpha = .65f), fontSize = 11.sp)
                     }
                 }
             }
         }
-        item {
-            Column(Modifier.padding(22.dp)) {
-                Text(item.displayTitle, color = TextPrimary, fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Black)
-                Text("★ ${"%.1f".format(item.voteAverage)}   ${item.year}", color = Accent, modifier = Modifier.padding(top = 8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 16.dp)) {
-                    Button(onClick = onFavorite) { Icon(Icons.Default.Favorite, null); Text(" В избранное") }
-                    OutlinedButton(onClick = {}) { Text("Трейлер") }
-                }
-                Text("Описание", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text(item.overview?.ifBlank { "Описание пока отсутствует." } ?: "Описание пока отсутствует.", color = TextSecondary, modifier = Modifier.padding(top = 8.dp))
-                Text("Информация предоставлена TMDB. Видеопотоки не входят в каталог.", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 24.dp))
+
+        Column(
+            Modifier.fillMaxSize().verticalScroll(scroll).padding(
+                horizontal = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) 34.dp else 18.dp,
+                vertical = 16.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            if (!info?.tagline.isNullOrBlank()) {
+                Text(info!!.tagline!!, color = TextSecondary, fontSize = 15.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
             }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onFavorite,
+                    shape = RoundedCornerShape(13.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("  В избранное", fontWeight = FontWeight.SemiBold)
+                }
+                if (!trailerKey.isNullOrBlank()) {
+                    OutlinedButton(
+                        onClick = { /* Trailer link is displayed below for TV compatibility. */ },
+                        shape = RoundedCornerShape(13.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = .7f))
+                    ) { Text("Трейлер найден", color = Accent) }
+                }
+            }
+
+            if (loadingDetails) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("Загружаем подробную информацию…", color = TextSecondary, fontSize = 13.sp)
+            }
+            if (detailsError) Text("Часть подробной информации временно недоступна.", color = TextSecondary, fontSize = 13.sp)
+
+            if (!info?.genres.isNullOrEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("ЖАНРЫ", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(info!!.genres) { genre ->
+                            Surface(color = Color(0xFF1A2A37), shape = RoundedCornerShape(50),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = .25f))) {
+                                Text(genre.name, color = Accent, fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("О ФИЛЬМЕ", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text(info?.overview?.takeIf { it.isNotBlank() } ?: item.overview?.takeIf { it.isNotBlank() }
+                    ?: "Описание пока отсутствует.", color = TextPrimary, fontSize = 15.sp, lineHeight = 23.sp)
+            }
+
+            val metadata = buildList {
+                if (year.isNotBlank()) add("Год выхода" to year)
+                if (info?.runtime != null) add("Длительность" to "${info.runtime} мин.")
+                if (info?.episodeRunTime?.firstOrNull() != null) add("Серия" to "${info.episodeRunTime.first()} мин.")
+                if (info?.numberOfSeasons != null) add("Сезоны" to info.numberOfSeasons.toString())
+                if (info?.numberOfEpisodes != null) add("Эпизоды" to info.numberOfEpisodes.toString())
+                if (!info?.status.isNullOrBlank()) add("Статус" to info!!.status!!)
+                if (!info?.productionCountries.isNullOrEmpty()) add("Страна" to info!!.productionCountries.joinToString { it.name })
+                if (!info?.originalLanguage.isNullOrBlank()) add("Язык оригинала" to info!!.originalLanguage!!.uppercase())
+                if (info?.voteCount != null && info.voteCount > 0) add("Оценок TMDB" to info.voteCount.toString())
+            }
+            if (metadata.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Text("ИНФОРМАЦИЯ", color = TextSecondary, fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
+                        modifier = Modifier.padding(bottom = 8.dp))
+                    metadata.forEach { (label, value) ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, color = TextSecondary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(value, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        HorizontalDivider(color = BorderSoft)
+                    }
+                }
+            }
+
+            if (cast.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("В ГЛАВНЫХ РОЛЯХ", color = TextSecondary, fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(cast) { person ->
+                            Column(Modifier.width(104.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                AsyncImage(
+                                    model = person.profilePath?.let { "https://image.tmdb.org/t/p/w185$it" },
+                                    contentDescription = person.name,
+                                    modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+                                        .clip(RoundedCornerShape(12.dp)).background(SurfaceDark),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Text(person.name, color = TextPrimary, fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold, maxLines = 2,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text(person.character, color = TextSecondary, fontSize = 10.sp,
+                                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!trailerKey.isNullOrBlank()) {
+                Text("Трейлер: https://www.youtube.com/watch?v=$trailerKey",
+                    color = Accent, fontSize = 13.sp)
+            }
+            Text("Данные и изображения предоставлены TMDB. Каталог не содержит видеопотоков.",
+                color = TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }
 }
