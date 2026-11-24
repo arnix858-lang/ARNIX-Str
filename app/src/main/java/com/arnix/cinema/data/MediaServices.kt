@@ -120,7 +120,8 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
     }
 
     suspend fun providers(item: MediaTitle): List<LampacProvider> = withContext(Dispatchers.IO) {
-        val params = "id=${item.id}&serial=${item.serial}&title=${enc(item.title)}&original_title=${enc(item.originalTitle)}&year=${enc(item.year)}&source=tmdb&life=true"
+        val ids = externalIds(item)
+        val params = "id=${item.id}&serial=${item.serial}&title=${enc(item.title)}&original_title=${enc(item.originalTitle)}&year=${enc(item.year)}&imdb_id=${enc(ids.optString("imdb_id"))}&kinopoisk_id=${enc(ids.optString("kinopoisk_id"))}&source=tmdb&life=true"
         val first = JSONObject(get("$baseUrl/lite/events?$params"))
         val direct = first.optJSONArray("online")
         if (direct != null && direct.length() > 0) return@withContext parseProviders(direct)
@@ -143,7 +144,10 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             val endpoint = provider.url.ifBlank { "$baseUrl/lite/${provider.provider}" }
             fun query(clarification: Boolean) = buildString {
                 append("title=${enc(item.title)}&original_title=${enc(item.originalTitle)}&year=${enc(item.year)}")
-                append("&tmdb_id=${item.id}&id=${item.id}&serial=${item.serial}")
+                val ids = externalIds(item)
+                append("&tmdb=${item.id}&tmdb_id=${item.id}&id=${item.id}&serial=${item.serial}")
+                if (ids.optString("imdb_id").isNotBlank()) append("&imdb_id=${enc(ids.optString("imdb_id"))}&imdb=${enc(ids.optString("imdb_id"))}")
+                if (ids.optString("kinopoisk_id").isNotBlank()) append("&kinopoisk_id=${enc(ids.optString("kinopoisk_id"))}&kp=${enc(ids.optString("kinopoisk_id"))}")
                 if (season != null) append("&s=$season")
                 if (episode != null) append("&e=$episode")
                 append("&rjson=true")
@@ -158,6 +162,10 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             }
             found.distinctBy { it.url }
         }
+
+    private fun externalIds(item: MediaTitle): JSONObject = runCatching {
+        JSONObject(get("$baseUrl/externalids?id=${item.id}&serial=${item.serial}"))
+    }.getOrDefault(JSONObject())
 
     private fun parseProviders(array: JSONArray): List<LampacProvider> {
         val result = mutableListOf<LampacProvider>()
@@ -208,9 +216,16 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         return lower.contains(".m3u8") || lower.contains(".mpd") || lower.contains(".mp4") || lower.contains("/proxy/") || lower.contains("/proxy-dash/")
     }
     private fun appendQuery(base: String, query: String): String {
-        val clean = base.substringBefore("?")
-        val existing = base.substringAfter("?", "")
-        return clean + "?" + listOf(existing, query).filter { it.isNotBlank() }.joinToString("&")
+        val params = linkedMapOf<String, String>()
+        fun add(raw: String) {
+            raw.split("&").filter { it.isNotBlank() }.forEach { part ->
+                val key = part.substringBefore("=")
+                if (key.isNotBlank()) params[key] = part.substringAfter("=", "")
+            }
+        }
+        add(base.substringAfter("?", ""))
+        add(query)
+        return base.substringBefore("?") + "?" + params.entries.joinToString("&") { "${it.key}=${it.value}" }
     }
     private fun enc(value: String) = URLEncoder.encode(value, "UTF-8")
 }
