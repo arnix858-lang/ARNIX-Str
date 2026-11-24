@@ -237,7 +237,10 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         }
     }
 
-    private fun secureLampac(value: String): String = value.replace("http://arnix-lampac-test.onrender.com", baseUrl, ignoreCase = true)
+    private fun secureLampac(value: String): String = value
+        .replace("http://arnix-lampac-test.onrender.com", baseUrl, ignoreCase = true)
+        .replace("http://localhost:9118", baseUrl, ignoreCase = true)
+        .replace("http://127.0.0.1:9118", baseUrl, ignoreCase = true)
 
     private fun isPlayable(value: String): Boolean {
         val v = value.trim()
