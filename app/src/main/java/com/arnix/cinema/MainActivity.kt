@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,12 @@ import com.arnix.cinema.data.TmdbApi
 import com.arnix.cinema.data.TmdbGenre
 import com.arnix.cinema.data.TmdbDetails
 import com.arnix.cinema.data.TmdbCast
+import com.arnix.cinema.data.HdRezkaService
+import com.arnix.cinema.data.RezkaSearchItem
+import com.arnix.cinema.data.RezkaStreamResponse
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.MediaItem as PlayerMediaItem
+import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -743,6 +751,16 @@ private fun DetailScreen(
     onBack: () -> Unit,
     onFavorite: () -> Unit
 ) {
+    val rezkaApi = remember { HdRezkaService.create() }
+    val scope = rememberCoroutineScope()
+    var rezkaSearching by remember { mutableStateOf(false) }
+    var rezkaError by remember { mutableStateOf<String?>(null) }
+    var rezkaResults by remember { mutableStateOf<List<RezkaSearchItem>>(emptyList()) }
+    var selectedRezka by remember { mutableStateOf<RezkaSearchItem?>(null) }
+    var rezkaStream by remember { mutableStateOf<RezkaStreamResponse?>(null) }
+    var rezkaLoadingStream by remember { mutableStateOf(false) }
+    var selectedTranslation by remember { mutableStateOf<String?>(null) }
+    var playerUrl by remember { mutableStateOf<String?>(null) }
     var details by remember(item.id) { mutableStateOf<TmdbDetails?>(null) }
     var cast by remember(item.id) { mutableStateOf<List<TmdbCast>>(emptyList()) }
     var loadingDetails by remember(item.id) { mutableStateOf(true) }
@@ -777,6 +795,134 @@ private fun DetailScreen(
     val context = LocalContext.current
 
     BackHandler(onBack = onBack)
+
+    if (rezkaSearching || rezkaError != null || rezkaResults.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { if (!rezkaSearching) { rezkaResults = emptyList(); rezkaError = null } },
+            title = { Text("Поиск на HDRezka") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (rezkaSearching) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Ищем «$title»…", color = TextSecondary)
+                    }
+                    rezkaError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                        items(rezkaResults) { result ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    selectedRezka = result
+                                    rezkaResults = emptyList()
+                                    rezkaLoadingStream = true
+                                    rezkaError = null
+                                    scope.launch {
+                                        try {
+                                            rezkaStream = rezkaApi.stream(result.url)
+                                            selectedTranslation = rezkaStream?.translators?.firstOrNull()?.id
+                                        } catch (_: Exception) {
+                                            rezkaError = "Не удалось получить видеоссылки. Источник может быть недоступен."
+                                        } finally { rezkaLoadingStream = false }
+                                    }
+                                },
+                                color = SurfaceDark,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(result.title, color = TextPrimary, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(12.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { rezkaResults = emptyList(); rezkaError = null }) { Text("Закрыть") } }
+        )
+    }
+
+    if (rezkaLoadingStream) {
+        AlertDialog(
+            onDismissRequest = { rezkaLoadingStream = false },
+            title = { Text("Получение видеоссылки") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("Получаем озвучки и доступные качества…", color = TextSecondary)
+            } },
+            confirmButton = { TextButton(onClick = { rezkaLoadingStream = false }) { Text("Отмена") } }
+        )
+    }
+
+    rezkaError?.takeIf { selectedRezka != null && !rezkaLoadingStream }?.let { message ->
+        AlertDialog(
+            onDismissRequest = { rezkaError = null; selectedRezka = null },
+            title = { Text("HDRezka") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { rezkaError = null; selectedRezka = null }) { Text("Понятно") } }
+        )
+    }
+
+    rezkaStream?.let { stream ->
+        AlertDialog(
+            onDismissRequest = { rezkaStream = null; selectedRezka = null },
+            title = { Text(stream.title.ifBlank { selectedRezka?.title ?: "Выбор потока" }) },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    if (stream.translators.isNotEmpty()) {
+                        Text("ОЗВУЧКА", color = Accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        stream.translators.forEach { translator ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                    .background(if (selectedTranslation == translator.id) Accent.copy(alpha = .16f) else SurfaceDark)
+                                    .clickable {
+                                        selectedTranslation = translator.id
+                                        val link = selectedRezka?.url ?: return@clickable
+                                        rezkaLoadingStream = true
+                                        scope.launch {
+                                            try { rezkaStream = rezkaApi.stream(link, translator.id) }
+                                            catch (_: Exception) { rezkaError = "Не удалось загрузить выбранную озвучку." }
+                                            finally { rezkaLoadingStream = false }
+                                        }
+                                    }.padding(11.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(translator.name, color = TextPrimary, modifier = Modifier.weight(1f))
+                                if (selectedTranslation == translator.id) Text("✓", color = Accent)
+                            }
+                        }
+                    }
+                    Text("КАЧЕСТВО", color = Accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    stream.qualities.forEach { (quality, urls) ->
+                        urls.forEach { link ->
+                            Button(onClick = { playerUrl = link; rezkaStream = null; selectedRezka = null },
+                                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(9.dp)) {
+                                Text(quality)
+                            }
+                        }
+                    }
+                    if (stream.qualities.isEmpty()) Text("Доступные качества не найдены.", color = TextSecondary)
+                }
+            },
+            confirmButton = { TextButton(onClick = { rezkaStream = null; selectedRezka = null }) { Text("Закрыть") } }
+        )
+    }
+
+    playerUrl?.let { link ->
+        val exoPlayer = remember(link) {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(PlayerMediaItem.fromUri(link))
+                prepare()
+                playWhenReady = true
+            }
+        }
+        DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
+        Dialog(onDismissRequest = { playerUrl = null }) {
+            Surface(Modifier.fillMaxWidth().aspectRatio(16f / 9f), color = Color.Black,
+                shape = RoundedCornerShape(12.dp)) {
+                AndroidView(factory = { viewContext ->
+                    PlayerView(viewContext).apply { player = exoPlayer; useController = true }
+                }, update = { it.player = exoPlayer }, modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Bg)) {
       Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
@@ -845,11 +991,17 @@ private fun DetailScreen(
             ) {
                 Button(
                     onClick = {
-                        Toast.makeText(
-                            context,
-                            "Просмотр будет доступен после подключения видеопотока.",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        scope.launch {
+                            rezkaSearching = true
+                            rezkaError = null
+                            rezkaResults = emptyList()
+                            try {
+                                rezkaResults = rezkaApi.search(title).results
+                                if (rezkaResults.isEmpty()) rezkaError = "На HDRezka ничего не найдено."
+                            } catch (_: Exception) {
+                                rezkaError = "Не удалось связаться с HDRezka API. Проверьте адрес сервера."
+                            } finally { rezkaSearching = false }
+                        }
                     },
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     shape = RoundedCornerShape(13.dp),
