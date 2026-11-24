@@ -33,6 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.MimeTypes
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.common.MediaItem as PlayerMediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.datasource.DefaultDataSource
@@ -337,22 +343,47 @@ fun ArnixCinemaApp() {
         }
 
         selectedStream?.let { stream ->
+            val view = LocalView.current
             val player = remember(stream.url, stream.headers) {
                 val httpFactory = DefaultHttpDataSource.Factory()
                     .setDefaultRequestProperties(stream.headers)
                 val mediaFactory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, httpFactory))
+                val mediaItem = PlayerMediaItem.Builder().setUri(stream.url)
+                    .setMimeType(detectStreamMime(stream.url)).build()
                 ExoPlayer.Builder(context).setMediaSourceFactory(mediaFactory).build().apply {
-                    setMediaItem(PlayerMediaItem.fromUri(stream.url))
+                    setMediaItem(mediaItem)
                     prepare()
                     playWhenReady = true
                 }
             }
-            DisposableEffect(player) { onDispose { player.release() } }
-            Dialog(onDismissRequest = { selectedStream = null }) {
-                Surface(Modifier.fillMaxWidth().aspectRatio(16f / 9f), color = Color.Black,
-                    shape = RoundedCornerShape(12.dp)) {
-                    AndroidView(factory = { PlayerView(it).apply { this.player = player; useController = true } },
-                        modifier = Modifier.fillMaxSize())
+            DisposableEffect(player, view) {
+                val window = (context as? android.app.Activity)?.window
+                val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
+                controller?.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller?.hide(WindowInsetsCompat.Type.systemBars())
+                onDispose {
+                    player.release()
+                    controller?.show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+            BackHandler { selectedStream = null }
+            Dialog(
+                onDismissRequest = { selectedStream = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+            ) {
+                Surface(Modifier.fillMaxSize(), color = Color.Black, shape = RoundedCornerShape(0.dp)) {
+                    AndroidView(
+                        factory = { ctx -> PlayerView(ctx).apply {
+                            this.player = player
+                            useController = true
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                            setControllerAutoShow(true)
+                        } },
+                        update = { it.player = player },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -455,5 +486,18 @@ private fun DetailScreen(
                 }
             }
         }
+    }
+}
+
+ 
+private fun detectStreamMime(rawUrl: String): String? {
+    val path = rawUrl.substringBefore('?').substringBefore('#').lowercase()
+    return when {
+        path.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+        path.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+        path.endsWith(".ism") || path.endsWith(".isml") || path.contains(".ism/manifest") -> MimeTypes.APPLICATION_SS
+        path.endsWith(".ts") || path.endsWith(".mpegts") -> MimeTypes.VIDEO_MP2T
+        path.startsWith("rtsp://") -> MimeTypes.APPLICATION_RTSP
+        else -> null
     }
 }
