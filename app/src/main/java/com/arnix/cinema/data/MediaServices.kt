@@ -135,12 +135,12 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
                 val state = JSONObject(get("$baseUrl/lifeevents?memkey=${enc(memkey)}&seen=$seen"))
                 latest = state.optJSONArray("online") ?: latest
                 seen = maxOf(seen, latest.length())
-                if (state.optBoolean("ready")) return@withContext parseProviders(latest).ifEmpty { fallbackProviders() }
+                if (state.optBoolean("ready")) return@withContext parseProviders(latest)
                 delay(450)
             }
-            parseProviders(latest).ifEmpty { fallbackProviders() }
+            parseProviders(latest)
         } else {
-            parseProviders(direct ?: JSONArray()).ifEmpty { fallbackProviders() }
+            parseProviders(direct ?: JSONArray())
         }
     }
 
@@ -187,15 +187,6 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
     // Stable list for Lampac installations that return no event results (sleeping Render,
     // source checks timing out, or providers configured but marked unavailable).
     // These are real Lampac routes; each is queried only after the aggregate list is empty.
-    private fun fallbackProviders(): List<LampacProvider> = listOf(
-        "Alloha" to "alloha", "Rezka" to "rezka", "Kodik" to "kodik",
-        "Collaps" to "collaps", "HDVB" to "hdvb", "Filmix" to "filmix",
-        "KinoPub" to "kinopub", "GetsTV" to "getstv", "iRemux" to "remux",
-        "VoKino" to "vokino", "Kinobase" to "kinobase", "Zetflix" to "zetflix",
-        "AniLibria" to "anilibria", "AnimeLib" to "animelib",
-        "AnimeVost" to "animevost", "AnimeGo" to "animego"
-    ).map { (name, key) -> LampacProvider(name, key, "$baseUrl/lite/$key", true) }
-
     private fun parseProviders(array: JSONArray): List<LampacProvider> {
         val providers = mutableListOf<LampacProvider>()
         for (i in 0 until array.length()) {
