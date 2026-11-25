@@ -197,7 +197,7 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
     ).map { (name, key) -> LampacProvider(name, key, "$baseUrl/lite/$key", true) }
 
     private fun parseProviders(array: JSONArray): List<LampacProvider> {
-        val live = mutableListOf<LampacProvider>()
+        val providers = mutableListOf<LampacProvider>()
         for (i in 0 until array.length()) {
             val o = array.optJSONObject(i) ?: continue
             val url = secureLampac(o.optString("url"))
@@ -205,17 +205,11 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             val key = o.optString("balanser").ifBlank {
                 url.substringAfterLast("/lite/").substringBefore("?").ifBlank { name.lowercase() }
             }
-            live.add(LampacProvider(name, key, url.ifBlank { "$baseUrl/lite/$key" }, o.optBoolean("show", true)))
+            providers.add(LampacProvider(name, key, url.ifBlank { "$baseUrl/lite/$key" }, o.optBoolean("show", true)))
         }
-
-        // Do not hide configured popular providers just because Lampac's asynchronous
-        // events response currently lists only a few resolved mirrors. Merge both lists.
-        val combined = (live + fallbackProviders())
-            .distinctBy { it.provider.lowercase().trim() }
-        val visible = combined.filter { it.available || isAlloha(it) }
-        return (visible.ifEmpty { combined })
+        return providers.distinctBy { it.provider.lowercase().trim() }
+            .filter { it.available || isAlloha(it) }
             .sortedWith(compareBy<LampacProvider> { if (isAlloha(it)) 0 else 1 }
-                .thenBy { if (it in live) 0 else 1 }
                 .thenBy { it.name.lowercase() })
     }
 
