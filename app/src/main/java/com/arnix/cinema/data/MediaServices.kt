@@ -197,20 +197,26 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
     ).map { (name, key) -> LampacProvider(name, key, "$baseUrl/lite/$key", true) }
 
     private fun parseProviders(array: JSONArray): List<LampacProvider> {
-        val result = mutableListOf<LampacProvider>()
+        val live = mutableListOf<LampacProvider>()
         for (i in 0 until array.length()) {
             val o = array.optJSONObject(i) ?: continue
             val url = secureLampac(o.optString("url"))
             val name = o.optString("name").ifBlank { o.optString("balanser", "Источник") }
-            val key = o.optString("balanser").ifBlank { url.substringAfterLast("/lite/").substringBefore("?").ifBlank { name.lowercase() } }
-            result.add(LampacProvider(name, key, url, o.optBoolean("show", true)))
+            val key = o.optString("balanser").ifBlank {
+                url.substringAfterLast("/lite/").substringBefore("?").ifBlank { name.lowercase() }
+            }
+            live.add(LampacProvider(name, key, url.ifBlank { "$baseUrl/lite/$key" }, o.optBoolean("show", true)))
         }
-        val unique = result.distinctBy { it.provider }
-        // Alloha is a preferred source: keep it visible even if Lampac marks it as not pre-checked,
-        // and place it at the top whenever the server returns it.
-        val visible = unique.filter { it.available || isAlloha(it) }
-        val ordered = (visible.ifEmpty { unique }).sortedBy { if (isAlloha(it) ) 0 else 1 }
-        return ordered
+
+        // Do not hide configured popular providers just because Lampac's asynchronous
+        // events response currently lists only a few resolved mirrors. Merge both lists.
+        val combined = (live + fallbackProviders())
+            .distinctBy { it.provider.lowercase().trim() }
+        val visible = combined.filter { it.available || isAlloha(it) }
+        return (visible.ifEmpty { combined })
+            .sortedWith(compareBy<LampacProvider> { if (isAlloha(it)) 0 else 1 }
+                .thenBy { if (it in live) 0 else 1 }
+                .thenBy { it.name.lowercase() })
     }
 
     private fun isAlloha(provider: LampacProvider): Boolean =
