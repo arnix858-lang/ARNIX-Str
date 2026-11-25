@@ -27,7 +27,7 @@ data class MediaDetails(
     val year: String, val rating: Double, val seasons: List<MediaSeason>
 )
 data class LampacProvider(val name: String, val provider: String, val url: String, val available: Boolean)
-data class LampacStream(val title: String, val url: String, val headers: Map<String, String> = emptyMap())
+data class LampacStream(val title: String, val url: String, val headers: Map<String, String> = emptyMap(), val mimeType: String? = null)
 
 class TmdbService {
     private val apiKey = BuildConfig.TMDB_API_KEY
@@ -205,39 +205,50 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
                 val nested = get(appendQuery(secureLampac(action), "rjson=true"))
                 parseJson(nested, provider.name)?.let { collectStreams(it, provider.name, found, 0) }
             }
-            found.distinctBy { it.url }
+            found.distinctBy { it.url }.map { stream -> stream.copy(mimeType = probeStreamMime(stream)) }
         }
 
     /**
      * Quick reachability check for the actual media URL. A provider is not considered
      * working just because it returned a syntactically valid but dead URL.
      */
-    private fun streamResponds(stream: LampacStream): Boolean = runCatching {
+    private fun streamResponds(stream: LampacStream): Boolean = probeStreamMime(stream) != null
+
+    // Lampac's /proxy/{token} URLs hide the original extension. Detect the real
+    // container/manifest before creating the ExoPlayer MediaSource.
+    private fun probeStreamMime(stream: LampacStream): String? = runCatching {
         val connection = (URL(stream.url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 7000
-            readTimeout = 7000
+            connectTimeout = 9000
+            readTimeout = 9000
             instanceFollowRedirects = true
-            setRequestProperty("Range", "bytes=0-1023")
+            setRequestProperty("Range", "bytes=0-4095")
             setRequestProperty("User-Agent", "Mozilla/5.0 ARNIX-Cinema")
             stream.headers.forEach { (key, value) -> setRequestProperty(key, value) }
         }
         try {
             val code = connection.responseCode
-            if (code !in 200..299 && code != 206) return@runCatching false
-            val input = connection.inputStream
-            val buffer = ByteArray(1024)
-            val count = input.use { it.read(buffer) }
-            if (count <= 0) return@runCatching false
-            val prefix = String(buffer, 0, count, Charsets.UTF_8).trimStart().lowercase()
-            !prefix.startsWith("<!doctype html") &&
-                !prefix.startsWith("<html") &&
-                !prefix.startsWith("{\"error\"") &&
-                !prefix.startsWith("{\"message\"")
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrDefault(false)
+            if (code !in 200..299 && code != 206) return@runCatching null
+            val buffer = ByteArray(4096)
+            val count = connection.inputStream.use { it.read(buffer) }
+            if (count <= 0) return@runCatching null
+            val prefix = String(buffer, 0, count, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+            val lower = prefix.lowercase()
+            when {
+                lower.startsWith("#extm3u") -> "application/x-mpegURL"
+                lower.contains("<mpd") -> "application/dash+xml"
+                lower.startsWith("<!doctype html") || lower.startsWith("<html") ||
+                    lower.startsWith("{\"error\"") || lower.startsWith("{\"message\"") -> null
+                count >= 8 && buffer[4] == 'f'.code.toByte() && buffer[5] == 't'.code.toByte() &&
+                    buffer[6] == 'y'.code.toByte() && buffer[7] == 'p'.code.toByte() -> "video/mp4"
+                (buffer[0].toInt() and 0xff) == 0x47 -> "video/mp2t"
+                connection.contentType?.contains("mpegurl", true) == true -> "application/x-mpegURL"
+                connection.contentType?.contains("dash+xml", true) == true -> "application/dash+xml"
+                connection.contentType?.startsWith("video/", true) == true -> connection.contentType.substringBefore(';')
+                else -> null
+            }
+        } finally { connection.disconnect() }
+    }.getOrNull()
 
     private fun externalIds(item: MediaTitle): JSONObject = runCatching {
         JSONObject(get("$baseUrl/externalids?id=${item.id}&tmdb_id=${item.id}&serial=${item.serial}"))
