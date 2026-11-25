@@ -2,8 +2,14 @@ package com.arnix.cinema.data
 
 import com.arnix.cinema.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -144,6 +150,31 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         }
     }
 
+    /**
+     * Проверяет каждый источник реальным запросом к его Lampac-модулю.
+     * В список попадают только провайдеры, от которых Lampac вернул хотя бы один поток.
+     */
+    suspend fun workingProviders(
+        item: MediaTitle, season: Int? = null, episode: Int? = null
+    ): List<LampacProvider> = withContext(Dispatchers.IO) {
+        val candidates = providers(item)
+        val gate = Semaphore(4)
+        coroutineScope {
+            candidates.map { provider ->
+                async {
+                    gate.withPermit {
+                        val works = withTimeoutOrNull(20_000) {
+                            runCatching {
+                                streams(item, provider, season, episode).isNotEmpty()
+                            }.getOrDefault(false)
+                        } ?: false
+                        if (works) provider else null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+    }
+
     suspend fun streams(item: MediaTitle, provider: LampacProvider, season: Int? = null, episode: Int? = null): List<LampacStream> =
         withContext(Dispatchers.IO) {
             val endpoint = provider.url.ifBlank { "$baseUrl/lite/${provider.provider}" }
@@ -198,8 +229,9 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             }
             providers.add(LampacProvider(name, key, url.ifBlank { "$baseUrl/lite/$key" }, o.optBoolean("show", true)))
         }
+        // Lampac's "show" flag is not a playback check. Keep returned modules as candidates;
+        // workingProviders() removes those that fail to return a stream for this title.
         return providers.distinctBy { it.provider.lowercase().trim() }
-            .filter { it.available || isAlloha(it) }
             .sortedWith(compareBy<LampacProvider> { if (isAlloha(it)) 0 else 1 }
                 .thenBy { it.name.lowercase() })
     }
