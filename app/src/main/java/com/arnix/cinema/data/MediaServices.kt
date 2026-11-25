@@ -121,22 +121,27 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
 
     suspend fun providers(item: MediaTitle): List<LampacProvider> = withContext(Dispatchers.IO) {
         val ids = externalIds(item)
-        val params = "id=${item.id}&serial=${item.serial}&title=${enc(item.title)}&original_title=${enc(item.originalTitle)}&year=${enc(item.year)}&imdb_id=${enc(ids.optString("imdb_id"))}&kinopoisk_id=${enc(ids.optString("kinopoisk_id"))}&source=tmdb&life=true"
+        val kp = firstNonBlank(ids, "kinopoisk_id", "kp_id", "kp")
+        val imdb = firstNonBlank(ids, "imdb_id", "imdb")
+        val params = "id=${item.id}&tmdb_id=${item.id}&serial=${item.serial}&title=${enc(item.title)}&original_title=${enc(item.originalTitle)}&year=${enc(item.year)}&imdb_id=${enc(imdb)}&imdb=${enc(imdb)}&kinopoisk_id=${enc(kp)}&kp=${enc(kp)}&source=tmdb&life=true"
         val first = JSONObject(get("$baseUrl/lite/events?$params"))
         val direct = first.optJSONArray("online")
         if (direct != null && direct.length() > 0) return@withContext parseProviders(direct)
         val memkey = first.optString("memkey")
-        if (memkey.isBlank()) throw IllegalStateException(first.optString("msg").ifBlank { "Lampac не вернул список источников." })
-        var seen = 0
-        var latest = JSONArray()
-        repeat(50) {
-            val state = JSONObject(get("$baseUrl/lifeevents?memkey=${enc(memkey)}&seen=$seen&id=${item.id}&serial=${item.serial}"))
-            latest = state.optJSONArray("online") ?: latest
-            if (latest.length() > seen) seen = latest.length()
-            if (state.optBoolean("ready")) return@withContext parseProviders(latest)
-            delay(500)
+        if (memkey.isNotBlank()) {
+            var seen = 0
+            var latest = JSONArray()
+            repeat(80) {
+                val state = JSONObject(get("$baseUrl/lifeevents?memkey=${enc(memkey)}&seen=$seen"))
+                latest = state.optJSONArray("online") ?: latest
+                seen = maxOf(seen, latest.length())
+                if (state.optBoolean("ready")) return@withContext parseProviders(latest).ifEmpty { fallbackProviders() }
+                delay(450)
+            }
+            parseProviders(latest).ifEmpty { fallbackProviders() }
+        } else {
+            parseProviders(direct ?: JSONArray()).ifEmpty { fallbackProviders() }
         }
-        parseProviders(latest)
     }
 
     suspend fun streams(item: MediaTitle, provider: LampacProvider, season: Int? = null, episode: Int? = null): List<LampacStream> =
@@ -173,8 +178,23 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
         }
 
     private fun externalIds(item: MediaTitle): JSONObject = runCatching {
-        JSONObject(get("$baseUrl/externalids?id=${item.id}&serial=${item.serial}"))
+        JSONObject(get("$baseUrl/externalids?id=${item.id}&tmdb_id=${item.id}&serial=${item.serial}"))
     }.getOrDefault(JSONObject())
+
+    private fun firstNonBlank(json: JSONObject, vararg keys: String): String =
+        keys.firstNotNullOfOrNull { key -> json.optString(key).takeIf { it.isNotBlank() && it != "null" } }.orEmpty()
+
+    // Stable list for Lampac installations that return no event results (sleeping Render,
+    // source checks timing out, or providers configured but marked unavailable).
+    // These are real Lampac routes; each is queried only after the aggregate list is empty.
+    private fun fallbackProviders(): List<LampacProvider> = listOf(
+        "Alloha" to "alloha", "Rezka" to "rezka", "Kodik" to "kodik",
+        "Collaps" to "collaps", "HDVB" to "hdvb", "Filmix" to "filmix",
+        "KinoPub" to "kinopub", "GetsTV" to "getstv", "iRemux" to "remux",
+        "VoKino" to "vokino", "Kinobase" to "kinobase", "Zetflix" to "zetflix",
+        "AniLibria" to "anilibria", "AnimeLib" to "animelib",
+        "AnimeVost" to "animevost", "AnimeGo" to "animego"
+    ).map { (name, key) -> LampacProvider(name, key, "$baseUrl/lite/$key", true) }
 
     private fun parseProviders(array: JSONArray): List<LampacProvider> {
         val result = mutableListOf<LampacProvider>()
