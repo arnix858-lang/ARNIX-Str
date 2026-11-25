@@ -165,7 +165,7 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
                     gate.withPermit {
                         val works = withTimeoutOrNull(20_000) {
                             runCatching {
-                                streams(item, provider, season, episode).isNotEmpty()
+                                streams(item, provider, season, episode).any { streamResponds(it) }
                             }.getOrDefault(false)
                         } ?: false
                         if (works) provider else null
@@ -207,6 +207,37 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             }
             found.distinctBy { it.url }
         }
+
+    /**
+     * Quick reachability check for the actual media URL. A provider is not considered
+     * working just because it returned a syntactically valid but dead URL.
+     */
+    private fun streamResponds(stream: LampacStream): Boolean = runCatching {
+        val connection = (URL(stream.url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 7000
+            readTimeout = 7000
+            instanceFollowRedirects = true
+            setRequestProperty("Range", "bytes=0-1023")
+            setRequestProperty("User-Agent", "Mozilla/5.0 ARNIX-Cinema")
+            stream.headers.forEach { (key, value) -> setRequestProperty(key, value) }
+        }
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299 && code != 206) return@runCatching false
+            val input = connection.inputStream
+            val buffer = ByteArray(1024)
+            val count = input.use { it.read(buffer) }
+            if (count <= 0) return@runCatching false
+            val prefix = String(buffer, 0, count, Charsets.UTF_8).trimStart().lowercase()
+            !prefix.startsWith("<!doctype html") &&
+                !prefix.startsWith("<html") &&
+                !prefix.startsWith("{\"error\"") &&
+                !prefix.startsWith("{\"message\"")
+        } finally {
+            connection.disconnect()
+        }
+    }.getOrDefault(false)
 
     private fun externalIds(item: MediaTitle): JSONObject = runCatching {
         JSONObject(get("$baseUrl/externalids?id=${item.id}&tmdb_id=${item.id}&serial=${item.serial}"))
