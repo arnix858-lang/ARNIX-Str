@@ -142,9 +142,9 @@ fun ArnixCinemaApp() {
             selectedProvider = null
             selectedStream = null
             try {
-                val found = lampac.providers(item)
+                val found = lampac.workingProviders(item, s, e)
                 providers = found
-                if (found.isEmpty()) videoError = "Lampac проверил источники, но доступных вариантов не нашёл."
+                if (found.isEmpty()) videoError = "Lampac проверил источники: рабочие потоки для этого фильма или серии не найдены."
             } catch (ex: Exception) {
                 videoError = "Ошибка Lampac: ${ex.message ?: "не удалось получить источники"}"
             } finally { providerLoading = false }
@@ -309,10 +309,10 @@ fun ArnixCinemaApp() {
             text = {
                 Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Доступные источники: ${providers.size}", color = TextSecondary)
+                    Text("Рабочие источники: ${providers.size}", color = TextSecondary)
                     providers.forEach { p ->
                         OutlinedButton(onClick = { loadProvider(p) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(p.name + if (p.available) " · доступен" else " · не проверен")
+                            Text(p.name + " · рабочий")
                         }
                     }
                 }
