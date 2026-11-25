@@ -350,7 +350,7 @@ fun ArnixCinemaApp() {
                     .setDefaultRequestProperties(stream.headers)
                 val mediaFactory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, httpFactory))
                 val mediaItem = PlayerMediaItem.Builder().setUri(stream.url)
-                    .setMimeType(detectStreamMime(stream.url)).build()
+                    .setMimeType(stream.mimeType ?: detectStreamMime(stream.url)).build()
                 ExoPlayer.Builder(context).setMediaSourceFactory(mediaFactory).build().apply {
                     if (stream.url.startsWith("rtsp://", ignoreCase = true)) {
                         setMediaSource(RtspMediaSource.Factory().createMediaSource(mediaItem))
