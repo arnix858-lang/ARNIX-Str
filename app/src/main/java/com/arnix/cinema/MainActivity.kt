@@ -142,9 +142,9 @@ fun ArnixCinemaApp() {
             selectedProvider = null
             selectedStream = null
             try {
-                val found = lampac.workingProviders(item, s, e)
+                val found = lampac.providers(item)
                 providers = found
-                if (found.isEmpty()) videoError = "Lampac проверил источники: рабочие потоки для этого фильма или серии не найдены."
+                if (found.isEmpty()) videoError = "Lampac не вернул список источников. Проверьте доступность сервера и ответ /lite/events."
             } catch (ex: Exception) {
                 videoError = "Ошибка Lampac: ${ex.message ?: "не удалось получить источники"}"
             } finally { providerLoading = false }
