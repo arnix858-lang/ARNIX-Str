@@ -269,7 +269,8 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
             val key = o.optString("balanser").ifBlank {
                 url.substringAfterLast("/lite/").substringBefore("?").ifBlank { name.lowercase() }
             }
-            providers.add(LampacProvider(name, key, url.ifBlank { "$baseUrl/lite/$key" }, o.optBoolean("show", true)))
+            val displayName = if (isAllohaName(name, key, url)) "Алладин" else name
+            providers.add(LampacProvider(displayName, key, url.ifBlank { "$baseUrl/lite/$key" }, o.optBoolean("show", true)))
         }
         // Lampac's "show" flag is not a playback check. Keep returned modules as candidates;
         // workingProviders() removes those that fail to return a stream for this title.
@@ -279,10 +280,17 @@ class LampacService(private val baseUrl: String = "https://arnix-lampac-test.onr
     }
 
     private fun isAlloha(provider: LampacProvider): Boolean =
-        provider.provider.contains("alloha", ignoreCase = true) ||
-            provider.name.contains("alloha", ignoreCase = true) ||
-            provider.name.contains("аллоха", ignoreCase = true) ||
-            provider.url.contains("alloha", ignoreCase = true)
+        isAllohaName(provider.name, provider.provider, provider.url)
+
+    private fun isAllohaName(name: String, key: String, url: String): Boolean =
+        key.contains("alloha", ignoreCase = true) ||
+            key.contains("alladin", ignoreCase = true) ||
+            name.contains("alloha", ignoreCase = true) ||
+            name.contains("alladin", ignoreCase = true) ||
+            name.contains("аллоха", ignoreCase = true) ||
+            name.contains("алладин", ignoreCase = true) ||
+            url.contains("alloha", ignoreCase = true) ||
+            url.contains("alladin", ignoreCase = true)
 
     private fun parseJson(body: String, label: String): Any? {
         JSONObjectOrNull(body)?.let { return it }
